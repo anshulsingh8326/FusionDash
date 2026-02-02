@@ -1,96 +1,147 @@
-let currentId = null;
+let allServices = [];
+let currentEditingId = null;
 
-// Initialize Sortable for Drag and Drop
-const grid = document.getElementById("grid");
-try {
-    new Sortable(grid, {
-        animation: 150,
-        ghostClass: 'sortable-ghost',
-        onEnd: async () => {
-            const items = [...grid.querySelectorAll('.card')].map((el, index) => ({
-                id: el.dataset.id,
-                order: index
-            }));
-            await fetch('/api/services/reorder', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(items)
-            });
-        }
-    });
-} catch(e) { console.log("Sortable not loaded yet"); }
+// --- INITIALIZATION ---
+async function init() {
+    try {
+        const res = await fetch("/api/init");
+        if (!res.ok) throw new Error("API Failed");
+        
+        const data = await res.json();
+        
+        // 1. Apply Theme first so it looks good immediately
+        applyTheme(data.theme);
+        
+        // 2. Store Data
+        allServices = data.services || [];
+        allServices.sort((a, b) => (a.order || 100) - (b.order || 100));
+        
+        // 3. Render UI
+        renderCategories();
+        renderGrid("all");
 
-async function loadServices() {
-    const res = await fetch("/api/services");
-    let services = await res.json();
-    
-    // Sort by the 'order' field
-    services.sort((a, b) => (a.order || 100) - (b.order || 100));
-
-    const term = document.getElementById("search").value.toLowerCase();
-    if(term) {
-        services = services.filter(s => s.name.toLowerCase().includes(term));
+    } catch (e) {
+        console.error("Init failed:", e);
     }
-    render(services);
 }
 
-function render(services) {
-    grid.innerHTML = "";
+function applyTheme(theme) {
+    if (!theme) return;
+    const root = document.documentElement;
     
-    services.forEach(service => {
+    if(theme.wallpaper) {
+        document.body.style.backgroundImage = `url('${theme.wallpaper}')`;
+        document.body.style.backgroundSize = "cover";
+        document.body.style.backgroundPosition = "center";
+    }
+    
+    if(theme.accent) root.style.setProperty('--accent', theme.accent);
+    if(theme.glass) root.style.setProperty('--glass-opacity', theme.glass);
+    
+    // Update Settings Modal Inputs (if they exist)
+    const wInput = document.getElementById("s-wallpaper");
+    if(wInput) {
+        wInput.value = theme.wallpaper || "";
+        document.getElementById("s-accent").value = theme.accent || "#007cff";
+        document.getElementById("s-glass").value = theme.glass || 0.7;
+    }
+}
+
+// --- RENDERING ---
+
+function renderCategories() {
+    const nav = document.getElementById("category-list");
+    if(!nav) return;
+
+    // Reset to just "All Apps"
+    nav.innerHTML = `
+        <button class="nav-item active" onclick="filterCat('all', this)">
+            <i class="ph ph-squares-four"></i> All Apps
+        </button>
+    `;
+
+    // Extract Unique Groups
+    const groups = [...new Set(allServices.map(s => s.group || "Unsorted"))].sort();
+    
+    groups.forEach(group => {
+        const btn = document.createElement("button");
+        btn.className = "nav-item";
+        btn.innerHTML = `<i class="ph ph-folder"></i> ${group}`;
+        btn.onclick = () => filterCat(group, btn);
+        nav.appendChild(btn);
+    });
+}
+
+// Make this global so onclick works in HTML
+window.filterCat = function(cat, btnElement) {
+    // UI Update
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    btnElement.classList.add('active');
+    
+    // Render Grid
+    renderGrid(cat);
+}
+
+function renderGrid(filterCat) {
+    const grid = document.getElementById("grid");
+    grid.innerHTML = "";
+
+    const term = document.getElementById("search").value.toLowerCase();
+
+    allServices.forEach(service => {
+        // Filter Logic
+        const sName = service.name ? service.name.toLowerCase() : "";
+        const sGroup = service.group || "Unsorted";
+
+        if (filterCat !== "all" && sGroup !== filterCat) return;
+        if (term && !sName.includes(term)) return;
+
+        // Create Card
         const card = document.createElement("div");
         card.className = "card";
-        card.dataset.id = service.id; // Important for Drag & Drop
-
-        // 1. Determine Icon Type (Image vs Emoji)
+        card.dataset.id = service.id; // Helpful for debug
+        
         const iconHtml = getIconHtml(service.icon, service.name);
 
         card.innerHTML = `
-            <div class="status-dot" id="status-${service.id}" title="Checking status..."></div>
+            <div class="status-dot" id="status-${service.id}" title="Checking..."></div>
             <div class="icon-box">${iconHtml}</div>
             <div class="info">
-                <div class="name">${service.name}</div>
-                <div class="group">${service.group || 'Apps'}</div>
+                <div class="name" title="${service.name}">${service.name}</div>
                 <div class="stats" id="stats-${service.id}"></div>
             </div>
-            <div class="edit-trigger">⋮</div>
+            <button class="edit-btn"><i class="ph ph-dots-three-vertical"></i></button>
         `;
 
-        // Card Click -> Open Link
-        card.onclick = () => window.open(service.href, "_blank");
-
-        // Edit Click -> Open Editor
-        card.querySelector(".edit-trigger").onclick = (e) => {
+        // Click Logic
+        card.onclick = () => {
+            if(service.href) window.open(service.href, "_blank");
+        };
+        
+        // Edit Logic
+        const editBtn = card.querySelector(".edit-btn");
+        editBtn.onclick = (e) => {
             e.stopPropagation();
             openEditor(service);
         };
 
         grid.appendChild(card);
-
-        // 2. Fire Async Status Checks (Don't await, let them load in bg)
-        checkStatus(service.id, service.href);
         
-        // 3. Fire API Stats Check (if key exists)
-        if(service.apiKey) {
-            fetchArrStats(service.id, service.href, service.apiKey);
-        }
+        // Fire async status check
+        checkStatus(service.id, service.href);
     });
 }
 
-/**
- * Smart Icon Logic:
- * - If string contains '/', '.', or 'http', render as <img src="...">
- * - If string is known app name, return default emoji
- * - Otherwise render as text/emoji
- */
+// --- HELPER FUNCTIONS (These were missing!) ---
+
 function getIconHtml(iconStr, appName) {
-    // 1. Explicit Image Path or URL
+    // 1. Image URL detection
     if (iconStr && (iconStr.includes("/") || iconStr.includes(".") || iconStr.startsWith("http"))) {
-        return `<img src="${iconStr}" class="custom-icon" alt="${appName}" onerror="this.style.display='none'">`;
+        return `<img src="${iconStr}" alt="${appName}" onerror="this.style.display='none'">`;
     }
 
-    // 2. Default Emoji Mapping (fallback)
-    const name = appName.toLowerCase();
+    // 2. Default Emoji Mapping
+    const name = appName ? appName.toLowerCase() : "";
     if (!iconStr) {
         if (name.includes("sonarr")) return "📺";
         if (name.includes("radarr")) return "🎬";
@@ -99,20 +150,20 @@ function getIconHtml(iconStr, appName) {
         if (name.includes("readarr")) return "📚";
         if (name.includes("transmission") || name.includes("qbit")) return "📥";
         if (name.includes("plex") || name.includes("jellyfin")) return "🍿";
+        if (name.includes("portainer")) return "🐳";
         return "📦";
     }
 
     // 3. Manual Emoji/Text
-    return `<span class="emoji-icon">${iconStr}</span>`;
+    return `<span style="font-size:32px">${iconStr}</span>`;
 }
 
-/**
- * Pings the backend proxy to check if service is online
- */
 async function checkStatus(id, url) {
     if(!url || url === "#") return;
     
     const dot = document.getElementById(`status-${id}`);
+    if(!dot) return;
+
     try {
         const res = await fetch(`/api/status/ping?url=${encodeURIComponent(url)}`);
         const data = await res.json();
@@ -122,51 +173,68 @@ async function checkStatus(id, url) {
             dot.title = "Online";
         } else {
             dot.classList.add("offline");
-            dot.title = "Offline/Unreachable";
+            dot.title = "Offline";
         }
     } catch (e) {
         dot.classList.add("offline");
     }
 }
 
-/**
- * Fetches Queue count from *Arr apps via backend proxy
- */
-async function fetchArrStats(id, url, key) {
-    const statsDiv = document.getElementById(`stats-${id}`);
-    try {
-        const res = await fetch(`/api/integration/arr/queue?url=${encodeURIComponent(url)}&api_key=${key}`);
-        const data = await res.json();
-        
-        if(data.count > 0) {
-            statsDiv.innerHTML = `<span class="badge">${data.count} Active</span>`;
-        }
-    } catch(e) {
-        console.log(`Stats failed for ${id}`, e);
+// --- MODAL & EDITOR LOGIC ---
+
+function openEditor(service) {
+    if(!service) {
+        // New Manual App Mode
+        currentEditingId = null;
+        document.getElementById("e-name").value = "";
+        document.getElementById("e-group").value = "Unsorted";
+        document.getElementById("e-href").value = "http://";
+        document.getElementById("e-icon").value = "";
+        document.getElementById("e-apikey").value = "";
+    } else {
+        // Edit Existing Mode
+        currentEditingId = service.id;
+        document.getElementById("e-name").value = service.name;
+        document.getElementById("e-group").value = service.group || "";
+        document.getElementById("e-href").value = service.href;
+        document.getElementById("e-icon").value = service.icon || "";
+        document.getElementById("e-apikey").value = service.apiKey || "";
     }
-}
-
-function openEditor(service = null) {
-    currentId = service ? service.id : null;
     
-    // Populate Fields
-    document.getElementById("e-name").value = service ? service.name : "";
-    document.getElementById("e-group").value = service ? service.group : "";
-    document.getElementById("e-href").value = service ? service.href : "http://";
-    document.getElementById("e-icon").value = service ? service.icon : "";
-    
-    // Populate API Key (handle undefined)
-    document.getElementById("e-apikey").value = service ? (service.apiKey || "") : "";
-
     document.getElementById("editor-side").classList.add("open");
     document.getElementById("overlay").classList.add("visible");
 }
 
-function closeEditor() {
+function closeOverlays() {
     document.getElementById("editor-side").classList.remove("open");
+    document.getElementById("settings-modal").classList.remove("active");
     document.getElementById("overlay").classList.remove("visible");
 }
 
+// --- EVENT LISTENERS ---
+
+// 1. Add Button
+const addBtn = document.getElementById("add-manual");
+if(addBtn) {
+    addBtn.onclick = () => openEditor(null);
+}
+
+// 2. Search Bar
+const searchInput = document.getElementById("search");
+if(searchInput) {
+    searchInput.oninput = () => renderGrid(document.querySelector('.nav-item.active').innerText.includes("All") ? "all" : "current");
+}
+
+// 3. Settings Button
+const settingsBtn = document.getElementById("open-settings");
+if(settingsBtn) {
+    settingsBtn.onclick = () => {
+        document.getElementById("settings-modal").classList.add("active");
+        document.getElementById("overlay").classList.add("visible");
+    };
+}
+
+// 4. Save App Changes
 document.getElementById("save-btn").onclick = async () => {
     const data = {
         name: document.getElementById("e-name").value,
@@ -176,24 +244,52 @@ document.getElementById("save-btn").onclick = async () => {
         apiKey: document.getElementById("e-apikey").value
     };
 
-    const url = currentId ? `/api/services/${currentId}/update` : `/api/services/add_manual`;
+    const url = currentEditingId ? `/api/services/${currentEditingId}/update` : `/api/services/add_manual`;
     
     try {
         await fetch(url, {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify(data)
+            method: "POST", 
+            body: JSON.stringify(data),
+            headers: { "Content-Type": "application/json" }
         });
-        closeEditor();
-        loadServices();
-    } catch (e) {
-        alert("Failed to save changes.");
+        closeOverlays();
+        init(); // Refresh grid
+    } catch(e) {
+        alert("Save failed");
     }
 };
 
-document.getElementById("add-manual").onclick = () => openEditor();
-document.getElementById("overlay").onclick = closeEditor;
-document.getElementById("search").oninput = loadServices;
+// 5. Hide App
+document.getElementById("hide-btn").onclick = async () => {
+    if(!currentEditingId) return; // Can't hide a new unsaved app
+    if(!confirm("Hide this app?")) return;
+    
+    await fetch(`/api/services/${currentEditingId}/hide`, { method: "POST" });
+    closeOverlays();
+    init();
+};
 
-// Initial Load
-loadServices();
+// 6. Save Global Settings
+document.getElementById("save-theme-btn").onclick = async () => {
+    const data = {
+        wallpaper: document.getElementById("s-wallpaper").value,
+        accent: document.getElementById("s-accent").value,
+        glass: document.getElementById("s-glass").value
+    };
+    
+    await fetch("/api/settings/theme", {
+        method: "POST",
+        body: JSON.stringify(data),
+        headers: { "Content-Type": "application/json" }
+    });
+    
+    applyTheme(data);
+    closeOverlays();
+};
+
+// 7. Overlay Click (Close all)
+document.getElementById("overlay").onclick = closeOverlays;
+document.getElementById("close-settings").onclick = closeOverlays;
+
+// --- START APP ---
+init();

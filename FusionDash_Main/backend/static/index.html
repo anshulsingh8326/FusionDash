@@ -4,55 +4,92 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FusionDash</title>
+    <title>FusionHex Dash</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
 </head>
 
 <body>
 
-    <header>
-        <div class="brand">Fusion<span>Dash</span></div>
-        <input type="text" id="search" placeholder="Search apps...">
-        <button id="add-manual" class="add-btn" title="Add Manual App">+</button>
-    </header>
+    <div class="layout">
+        <aside id="sidebar">
+            <div class="brand">
+                <i class="ph-fill ph-hexagon"></i>
+                <span>FusionHex</span>
+            </div>
 
-    <div id="grid">
+            <nav id="category-list">
+                <button class="nav-item active" data-cat="all">
+                    <i class="ph ph-squares-four"></i> All Apps
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button id="open-settings" class="nav-item">
+                    <i class="ph ph-gear"></i> Settings
+                </button>
+            </div>
+        </aside>
+
+        <main>
+            <header>
+                <div class="search-bar">
+                    <i class="ph ph-magnifying-glass"></i>
+                    <input type="text" id="search" placeholder="Search...">
+                </div>
+                <button id="add-manual" class="btn-icon" title="Add Link">
+                    <i class="ph ph-plus"></i>
+                </button>
+            </header>
+
+            <div id="grid-container">
+                <div id="grid">
+                </div>
+            </div>
+        </main>
     </div>
 
     <div id="overlay"></div>
-
     <div id="editor-side">
-        <h3>Edit Service</h3>
-
+        <h3>Edit App</h3>
         <div class="field">
-            <label>Display Name</label>
-            <input id="e-name" type="text" placeholder="e.g. Sonarr">
+            <label>Name</label> <input id="e-name">
         </div>
-
         <div class="field">
-            <label>Group</label>
-            <input id="e-group" type="text" placeholder="e.g. Media">
+            <label>Group</label> <input id="e-group">
         </div>
-
         <div class="field">
-            <label>URL (Link)</label>
-            <input id="e-href" type="text" placeholder="http://192.168.1.5:8989">
+            <label>URL</label> <input id="e-href">
         </div>
-
         <div class="field">
-            <label>Icon (Emoji or text)</label>
-            <input id="e-icon" type="text" placeholder="📺">
+            <label>Icon URL / Emoji</label> <input id="e-icon">
         </div>
-
         <div class="field">
-            <label>API Key (Optional)</label>
-            <input id="e-apikey" type="text" placeholder="For Sonarr/Radarr stats">
+            <label>API Key (Optional)</label> <input id="e-apikey">
         </div>
+        <div class="actions">
+            <button id="hide-btn" class="btn btn-danger">Hide App</button>
+            <button id="save-btn" class="btn btn-primary">Save</button>
+        </div>
+    </div>
 
-        <div style="margin-top: 20px; display: flex; gap: 10px;">
-            <button id="save-btn" class="btn" style="flex: 1;">Save Changes</button>
+    <div id="settings-modal">
+        <h3>Dashboard Settings</h3>
+        <div class="field">
+            <label>Wallpaper URL</label>
+            <input id="s-wallpaper" placeholder="http://...">
         </div>
+        <div class="field">
+            <label>Accent Color</label>
+            <input type="color" id="s-accent" value="#007cff">
+        </div>
+        <div class="field">
+            <label>Card Opacity</label>
+            <input type="range" id="s-glass" min="0.1" max="1" step="0.1">
+        </div>
+        <button id="save-theme-btn" class="btn btn-primary" style="width:100%">Save Theme</button>
+        <button id="close-settings" class="btn btn-text" style="width:100%; margin-top:10px">Close</button>
     </div>
 
     <script src="app.js"></script>
