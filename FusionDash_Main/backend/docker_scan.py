@@ -1,123 +1,122 @@
 import docker
 
+# Auto-detect these apps
 ARR_APPS = {
-    "sonarr":  {"name": "Sonarr",  "icon": "sonarr",  "group": "media"},
-    "radarr":  {"name": "Radarr",  "icon": "radarr",  "group": "media"},
-    "lidarr":  {"name": "Lidarr",  "icon": "lidarr",  "group": "media"},
-    "readarr": {"name": "Readarr", "icon": "readarr", "group": "media"},
-    "bazarr":  {"name": "Bazarr",  "icon": "bazarr",  "group": "media"},
-    "prowlarr":{"name": "Prowlarr","icon": "prowlarr","group": "media"},
+    "sonarr":      {"name": "Sonarr",      "icon": "sonarr",      "group": "Media"},
+    "radarr":      {"name": "Radarr",      "icon": "radarr",      "group": "Media"},
+    "lidarr":      {"name": "Lidarr",      "icon": "lidarr",      "group": "Media"},
+    "readarr":     {"name": "Readarr",     "icon": "readarr",     "group": "Media"},
+    "bazarr":      {"name": "Bazarr",      "icon": "bazarr",      "group": "Media"},
+    "prowlarr":    {"name": "Prowlarr",    "icon": "prowlarr",    "group": "Media"},
+    "plex":        {"name": "Plex",        "icon": "plex",        "group": "Media"},
+    "jellyfin":    {"name": "Jellyfin",    "icon": "jellyfin",    "group": "Media"},
+    "tautulli":    {"name": "Tautulli",    "icon": "tautulli",    "group": "Admin"},
+    "portainer":   {"name": "Portainer",   "icon": "portainer",   "group": "Admin"},
+    "transmission":{"name": "Transmission","icon": "transmission","group":"Downloads"},
+    "qbittorrent": {"name": "qBittorrent", "icon": "qbittorrent", "group":"Downloads"},
+    "saber":       {"name": "Saber",       "icon": "notes",       "group": "Tools"},
 }
 
-
 def detect_arr(container):
+    # Check by Image Name first
+    if container.image and container.image.tags:
+        image = container.image.tags[0].lower()
+    else:
+        image = ""
+        
     name = container.name.lower()
-    image = container.image.tags[0].lower() if container.image.tags else ""
-
     haystack = f"{name} {image}"
 
     for key, meta in ARR_APPS.items():
         if key in haystack:
             return meta
-
     return None
-
 
 def scan_containers():
     client = docker.from_env()
     results = []
 
     for c in client.containers.list():
+        # Get Ports
         ports = c.attrs.get("NetworkSettings", {}).get("Ports", {})
-        published_ports = [
-            v[0]["HostPort"]
-            for v in ports.values()
-            if v and isinstance(v, list)
-        ]
-
-        if not published_ports:
-            continue
+        published_ports = []
+        if ports:
+            for k, v in ports.items():
+                if v and isinstance(v, list):
+                    # v is [{'HostIp': '0.0.0.0', 'HostPort': '8080'}]
+                    published_ports.append(v[0]["HostPort"])
 
         labels = c.labels or {}
 
-        # Optional hide flag (always respected)
+        # 1. Skip if explicitly hidden via label
         if labels.get("fusiondash.hidden") == "true":
             continue
 
+        # 2. Check if it's a known app
         detected = detect_arr(c)
 
-        # Inclusion rules
+        # 3. Determine Group & Name
+        # Priority: Label > Detection > Default
         enabled = labels.get("fusiondash.enable") == "true"
-        if not enabled and not detected:
-            continue
-
+        
+        # --- CHANGE: We now accept EVERYTHING, not just enabled/detected ---
+        
         results.append(build_entry(
             container=c,
             ports=published_ports,
             labels=labels,
-            detected=detected,
-            source="label" if enabled else "arr"
+            detected=detected
         ))
 
     return sorted(results, key=lambda x: x.get("order", 100))
 
-def update_container_labels(container_id: str, updates: dict):
-    client = docker.from_env()
-    container = client.containers.get(container_id)
-
-    labels = container.labels or {}
-
-    mapping = {
-        "name": "fusiondash.name",
-        "icon": "fusiondash.icon",
-        "group": "fusiondash.group",
-        "order": "fusiondash.order",
-        "href": "fusiondash.href",
-        "enabled": "fusiondash.enable",
-        "hidden": "fusiondash.hidden",
-    }
-
-    for key, label_key in mapping.items():
-        if key in updates:
-            labels[label_key] = str(updates[key])
-
-    container.update(labels=labels)
-
-
 def select_web_port(ports):
-    # Prefer common web UI ports
-    for p in ports:
-        if p.startswith(("80", "90", "30")):
-            return p
+    if not ports: return None
+    # Prefer common web ports
+    preferences = ["80", "443", "8080", "8000", "9000", "3000"]
+    for pref in preferences:
+        if pref in ports: return pref
+    # Otherwise just take the first one
     return ports[0]
 
-
-def build_entry(container, ports, labels, detected, source):
+def build_entry(container, ports, labels, detected):
     host = "http://localhost"
 
+    # URL Logic
     if labels.get("fusiondash.href"):
         href = labels["fusiondash.href"]
-    else:
+    elif ports:
         web_port = select_web_port(ports)
         href = f"{host}:{web_port}"
+    else:
+        href = "" # No ports exposed
 
-    name = (
-        labels.get("fusiondash.name")
-        or (detected["name"] if detected else container.name)
-    )
+    # Name Logic
+    if labels.get("fusiondash.name"):
+        name = labels["fusiondash.name"]
+    elif detected:
+        name = detected["name"]
+    else:
+        # Capitalize container name
+        name = container.name.replace("-", " ").title()
 
-    icon = (
-        labels.get("fusiondash.icon")
-        or (detected["icon"] if detected else "generic")
-    )
+    # Icon Logic
+    if labels.get("fusiondash.icon"):
+        icon = labels["fusiondash.icon"]
+    elif detected:
+        icon = detected["icon"]
+    else:
+        icon = "" # Frontend will handle default box icon
 
-    group = (
-        labels.get("fusiondash.group")
-        or (detected["group"] if detected else "custom")
-    )
+    # Group Logic
+    if labels.get("fusiondash.group"):
+        group = labels["fusiondash.group"]
+    elif detected:
+        group = detected["group"]
+    else:
+        group = "Other"
 
-    order = int(labels.get("fusiondash.order", 100))
-    stack = labels.get("fusiondash.stack")
+    order = int(labels.get("fusiondash.order", 999))
 
     return {
         "id": container.id,
@@ -128,8 +127,5 @@ def build_entry(container, ports, labels, detected, source):
         "href": href,
         "ports": ports,
         "order": order,
-        "stack": stack,
-        "source": source,
+        "source": "docker",
     }
-
-

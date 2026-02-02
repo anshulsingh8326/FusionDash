@@ -1,18 +1,23 @@
 {
   "overrides": {
-    "Prowlarr": {
-      "name": "Prowlarr",
-      "group": "media",
-      "href": "http://localhost:9696",
-      "icon": "prowlarr",
-      "apiKey": "574559feb5824af8861e0aa4f73e53bf"
+    "Open Webui": {
+      "name": "Open Webui",
+      "pinned": false
+    },
+    "Test Nginx": {
+      "name": "Test Nginx",
+      "pinned": false
+    },
+    "Homepage": {
+      "name": "Homepage",
+      "pinned": false
     }
   },
   "manual": [],
   "hidden": [],
   "theme": {
     "wallpaper": "https://c4.wallpaperflare.com/wallpaper/586/603/742/minimalism-4k-for-mac-desktop-wallpaper-preview.jpg",
-    "accent": "#00d5ff",
-    "glass": "0.7"
+    "accent": "#00b3ff",
+    "glass": "0.5"
   }
 }

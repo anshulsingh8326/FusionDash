@@ -5,13 +5,20 @@ from fastapi import FastAPI, Body
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from docker_scan import scan_containers
+import os
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_FILE = BASE_DIR / "user_settings.json"
 
 app = FastAPI()
 
-# --- Helper Functions ---
+@app.post("/api/settings/reset")
+def reset_settings():
+    """Factory Reset: Deletes the settings file to restore defaults."""
+    if DATA_FILE.exists():
+        os.remove(DATA_FILE)
+    return {"status": "reset"}
+# --- HELPER FUNCTIONS ---
 
 def load_settings():
     defaults = {
@@ -28,7 +35,6 @@ def load_settings():
         return defaults
     try:
         data = json.loads(DATA_FILE.read_text())
-        # Ensure all default keys exist
         for key, val in defaults.items():
             if key not in data:
                 data[key] = val
@@ -51,11 +57,14 @@ def get_all_services(settings):
         docker_apps = []
 
     for app in docker_apps:
-        # Skip hidden
+        # SKIP if Globally Hidden (The "Uninstall" logic)
         if app["id"] in settings["hidden"]:
             continue
             
-        # Apply Overrides (Name, Group, Icon)
+        # DEFAULT: Pinned to Board = True
+        app["pinned"] = True
+
+        # Apply Overrides (Name, Icon, PINNED status)
         if app["name"] in settings["overrides"]:
             app.update(settings["overrides"][app["name"]])
             
@@ -63,14 +72,17 @@ def get_all_services(settings):
 
     # 2. Manual Apps
     for m_app in settings["manual"]:
+        # SKIP if Globally Hidden
         if m_app["id"] not in settings["hidden"]:
+            # Default manual apps to pinned if not specified
+            if "pinned" not in m_app:
+                m_app["pinned"] = True
             final_list.append(m_app)
 
     return final_list
 
-# --- API Endpoints ---
+# --- API ENDPOINTS ---
 
-# NEW: The main endpoint for the V2 Dashboard
 @app.get("/api/init")
 def init_dashboard():
     settings = load_settings()
@@ -79,12 +91,6 @@ def init_dashboard():
         "services": services,
         "theme": settings["theme"]
     }
-
-# RESTORED: The old endpoint (for debugging or old frontend code)
-@app.get("/api/services")
-def services_legacy():
-    settings = load_settings()
-    return get_all_services(settings)
 
 @app.post("/api/services/{id}/update")
 def update_service(id: str, payload: dict = Body(...)):
@@ -99,14 +105,33 @@ def update_service(id: str, payload: dict = Body(...)):
             break
             
     if not is_manual:
-        # Save to overrides using name as key
-        settings["overrides"][payload["name"]] = payload
+        # Docker App: Save to overrides
+        # Ensure we have the name to use as key
+        name = payload.get("name")
+        if name:
+            if name not in settings["overrides"]:
+                settings["overrides"][name] = {}
+            settings["overrides"][name].update(payload)
 
     save_settings(settings)
     return {"status": "ok"}
 
+@app.post("/api/services/add_manual")
+def add_manual(payload: dict = Body(...)):
+    settings = load_settings()
+    payload["id"] = f"manual_{len(settings['manual']) + 100}"
+    payload["source"] = "manual"
+    payload["pinned"] = True # Default new apps to pinned
+    if "group" not in payload or not payload["group"]:
+        payload["group"] = "Unsorted"
+        
+    settings["manual"].append(payload)
+    save_settings(settings)
+    return {"status": "created"}
+
 @app.post("/api/services/{id}/hide")
 def hide_service(id: str):
+    """Global Hide (The 'Uninstall' logic)"""
     settings = load_settings()
     if id not in settings["hidden"]:
         settings["hidden"].append(id)
@@ -116,24 +141,22 @@ def hide_service(id: str):
 @app.post("/api/settings/theme")
 def update_theme(payload: dict = Body(...)):
     settings = load_settings()
-    if "theme" not in settings: settings["theme"] = {}
     settings["theme"].update(payload)
     save_settings(settings)
     return {"status": "ok"}
 
-# Status Ping (with SSL ignore and timeout)
+# --- UTILS ---
+
 @app.get("/api/status/ping")
 def ping_service(url: str):
     try:
         resp = requests.get(url, timeout=2, verify=False)
-        # Accept 401/403 as "Online" (Auth required = Server is up)
         if resp.status_code < 500:
             return {"status": "online", "code": resp.status_code}
         return {"status": "error", "code": resp.status_code}
     except:
         return {"status": "offline"}
 
-# Arr Queue Proxy
 @app.get("/api/integration/arr/queue")
 def arr_queue(url: str, api_key: str):
     try:

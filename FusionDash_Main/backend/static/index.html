@@ -4,10 +4,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FusionHex Dash</title>
+    <title>FusionBoard</title>
     <link rel="stylesheet" href="style.css">
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 </head>
 
 <body>
@@ -15,13 +15,21 @@
     <div class="layout">
         <aside id="sidebar">
             <div class="brand">
-                <i class="ph-fill ph-hexagon"></i>
-                <span>FusionHex</span>
+                <i class="ph-fill ph-hexagon" style="color:var(--accent)"></i>
+                <span>FusionBoard</span>
             </div>
 
-            <nav id="category-list">
-                <button class="nav-item active" data-cat="all">
-                    <i class="ph ph-squares-four"></i> All Apps
+            <nav id="board-nav">
+                <div class="nav-label">MY BOARDS</div>
+                <button class="nav-item active" onclick="switchView('board')">
+                    <i class="ph ph-layout"></i> Main Board
+                </button>
+            </nav>
+
+            <nav id="library-nav" style="margin-top: 20px;">
+                <div class="nav-label">SYSTEM</div>
+                <button class="nav-item" onclick="switchView('library')">
+                    <i class="ph ph-books"></i> All Apps (Library)
                 </button>
             </nav>
 
@@ -34,18 +42,32 @@
 
         <main>
             <header>
-                <div class="search-bar">
-                    <i class="ph ph-magnifying-glass"></i>
-                    <input type="text" id="search" placeholder="Search...">
+                <h2 id="page-title">Main Board</h2>
+                <div class="header-actions">
+                    <div class="search-bar">
+                        <i class="ph ph-magnifying-glass"></i>
+                        <input type="text" id="search" placeholder="Search...">
+                    </div>
+                    <button id="add-manual" class="btn-icon" title="Add Link">
+                        <i class="ph ph-plus"></i>
+                    </button>
                 </div>
-                <button id="add-manual" class="btn-icon" title="Add Link">
-                    <i class="ph ph-plus"></i>
-                </button>
             </header>
 
-            <div id="grid-container">
-                <div id="grid">
+            <div id="board-view" class="view-container"></div>
+
+            <div id="library-view" class="view-container hidden">
+                <div class="library-stats">
+                    <div class="stat-card">
+                        <span id="total-count">0</span>
+                        <label>Total Services</label>
+                    </div>
+                    <div class="stat-card">
+                        <span id="arr-count">0</span>
+                        <label id="arr-label">Pinned Apps</label>
+                    </div>
                 </div>
+                <div id="library-grid" class="grid-compact"></div>
             </div>
         </main>
     </div>
@@ -53,43 +75,39 @@
     <div id="overlay"></div>
     <div id="editor-side">
         <h3>Edit App</h3>
-        <div class="field">
-            <label>Name</label> <input id="e-name">
-        </div>
-        <div class="field">
-            <label>Group</label> <input id="e-group">
-        </div>
-        <div class="field">
-            <label>URL</label> <input id="e-href">
-        </div>
-        <div class="field">
-            <label>Icon URL / Emoji</label> <input id="e-icon">
-        </div>
-        <div class="field">
-            <label>API Key (Optional)</label> <input id="e-apikey">
-        </div>
-        <div class="actions">
-            <button id="hide-btn" class="btn btn-danger">Hide App</button>
-            <button id="save-btn" class="btn btn-primary">Save</button>
+        <div class="field"><label>Display Name</label><input id="e-name" type="text"></div>
+        <div class="field"><label>Group</label><input id="e-group" type="text"></div>
+        <div class="field"><label>URL</label><input id="e-href" type="text"></div>
+        <div class="field"><label>Icon</label><input id="e-icon" type="text"></div>
+        <div class="field"><label>API Key</label><input id="e-apikey" type="text"></div>
+
+        <div class="actions-stack">
+            <button id="save-btn" class="btn btn-primary">Save Changes</button>
+
+            <button id="pin-btn" class="btn btn-secondary">Unpin from Board</button>
+
+            <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 10px 0;"></div>
+
+            <button id="hide-btn" class="btn btn-text-danger">Hide from Library (Uninstall)</button>
         </div>
     </div>
 
     <div id="settings-modal">
         <h3>Dashboard Settings</h3>
-        <div class="field">
-            <label>Wallpaper URL</label>
-            <input id="s-wallpaper" placeholder="http://...">
-        </div>
-        <div class="field">
-            <label>Accent Color</label>
-            <input type="color" id="s-accent" value="#007cff">
-        </div>
-        <div class="field">
-            <label>Card Opacity</label>
-            <input type="range" id="s-glass" min="0.1" max="1" step="0.1">
+        <div class="field"><label>Wallpaper URL</label><input id="s-wallpaper" type="text"></div>
+        <div class="field"><label>Accent Color</label><input id="s-accent" type="color" style="height:40px"></div>
+        <div class="field"><label>Glass Opacity</label><input id="s-glass" type="range" min="0.1" max="1" step="0.1">
         </div>
         <button id="save-theme-btn" class="btn btn-primary" style="width:100%">Save Theme</button>
+        
+        <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
+        
+        <button id="reset-btn" class="btn btn-danger" style="width:100%">
+            <i class="ph-bold ph-trash"></i> Reset Everything to Default
+        </button>
+        
         <button id="close-settings" class="btn btn-text" style="width:100%; margin-top:10px">Close</button>
+        </div>
     </div>
 
     <script src="app.js"></script>
