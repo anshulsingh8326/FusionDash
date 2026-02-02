@@ -2,6 +2,7 @@ fetch("/api/services")
   .then(r => r.json())
   .then(services => {
     const grid = document.getElementById("grid");
+    grid.innerHTML = "";
     services.forEach(s => {
       const card = document.createElement("div");
       card.className = "card";

@@ -1,5 +1,5 @@
 @echo off
-set PROJECT_NAME=docker-home-ui
+set PROJECT_NAME=FusionDash_Main
 
 echo Creating project structure: %PROJECT_NAME%
 
