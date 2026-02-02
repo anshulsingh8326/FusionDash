@@ -19,8 +19,8 @@
         <aside id="sidebar">
             <div class="sidebar-header">
                 <div class="brand">
-                    <i class="ph-fill ph-hexagon" style="color:var(--accent-orange)"></i>
-                    <span class="brand-text">FusionDash</span>
+                    <i id="brand-logo" class="ph-fill ph-hexagon" style="color:var(--accent)"></i>
+                    <span id="brand-text" class="brand-text">FusionDash</span>
                 </div>
                 <button id="sidebar-toggle" class="btn-ghost">
                     <i class="ph-bold ph-caret-double-left"></i>
@@ -48,7 +48,7 @@
             </nav>
 
             <div class="sidebar-footer">
-                <div class="footer-info">FusionHex Dashboard v1.2</div>
+                <div class="footer-info">v1.3</div>
             </div>
         </aside>
 
@@ -103,7 +103,6 @@
             <div class="field-group">
                 <label>Wallpaper Setup</label>
                 <input id="b-wallpaper" type="text" placeholder="Image URL">
-
                 <div class="control-row">
                     <div class="sub-field">
                         <label>Blur</label>
@@ -127,6 +126,14 @@
                 <label>Layout Options</label>
                 <div class="control-row">
                     <div class="sub-field">
+                        <label>Card Style</label> <select id="b-style">
+                            <option value="standard">Standard (Box)</option>
+                            <option value="wide">Wide (List View)</option>
+                            <option value="minimal">Minimal (Icon Only)</option>
+                            <option value="neon">Neon (Glow)</option>
+                        </select>
+                    </div>
+                    <div class="sub-field">
                         <label>Card Size</label>
                         <select id="b-cardsize">
                             <option value="small">Small</option>
@@ -134,13 +141,13 @@
                             <option value="large">Large</option>
                         </select>
                     </div>
-                    <div class="sub-field">
-                        <label>Alignment</label>
-                        <select id="b-align">
-                            <option value="left">Left</option>
-                            <option value="center">Center</option>
-                        </select>
-                    </div>
+                </div>
+                <div class="field" style="margin-top:10px">
+                    <label>Alignment</label>
+                    <select id="b-align">
+                        <option value="left">Left</option>
+                        <option value="center">Center</option>
+                    </select>
                 </div>
             </div>
         </div>
@@ -156,8 +163,7 @@
             <button class="close-modal"><i class="ph ph-x"></i></button>
         </div>
         <div class="modal-body">
-            <div id="picker-list" class="picker-grid">
-            </div>
+            <div id="picker-list" class="picker-grid"></div>
             <div class="picker-footer">
                 <p style="font-size:0.8rem; color:#666; margin-bottom:10px;">App not in Library?</p>
                 <button id="btn-create-new" class="btn btn-primary" style="width: auto;">
@@ -173,25 +179,71 @@
             <button class="close-modal"><i class="ph ph-x"></i></button>
         </div>
         <div class="modal-body">
+
             <div class="field-group">
-                <label>Data Management</label>
-                <p style="font-size: 0.8rem; color: #888; margin-bottom: 15px; line-height: 1.4;">
-                    Resetting will clear all your custom Boards and layouts. Your services will remain in the Library
-                    (backend).
-                </p>
+                <label>Branding</label>
+                <div class="field">
+                    <label>Dashboard Name</label>
+                    <input id="g-appname" type="text" placeholder="FusionDash">
+                </div>
+                <div class="field">
+                    <label>Logo Icon (Phosphor name or URL)</label>
+                    <input id="g-logo" type="text" placeholder="ph-hexagon">
+                </div>
+            </div>
+
+            <div class="field-group">
+                <label>Theme & Sidebar</label>
+                <div class="control-row">
+                    <div class="sub-field">
+                        <label>Accent Color</label>
+                        <input id="g-accent" type="color" style="height:40px; cursor:pointer;">
+                    </div>
+                    <div class="sub-field">
+                        <label>Sidebar Opacity</label>
+                        <input id="g-side-opacity" type="range" min="0.2" max="1" step="0.1">
+                    </div>
+                </div>
+                <div class="field" style="margin-top:15px; display:flex; align-items:center; gap:10px;">
+                    <input type="checkbox" id="g-autocollapse" style="width:auto;">
+                    <label style="margin:0; cursor:pointer;" for="g-autocollapse">Start Sidebar Collapsed</label>
+                </div>
+            </div>
+
+            <div class="field-group" style="border-color: rgba(255,68,68,0.2);">
+                <label style="color:#ff6666">Danger Zone</label>
                 <button id="btn-hard-reset" class="btn btn-danger" style="width:100%">
-                    <i class="ph-bold ph-trash"></i> Reset All Board Data
+                    <i class="ph-bold ph-trash"></i> Reset All Data
                 </button>
             </div>
+        </div>
+        <div class="modal-footer">
+            <button id="save-global-btn" class="btn btn-primary">Save System Settings</button>
         </div>
     </div>
 
     <div id="editor-side">
         <h3>Edit Service</h3>
+
         <div class="field"><label>Display Name</label><input id="e-name" type="text"></div>
         <div class="field"><label>Group (Section)</label><input id="e-group" type="text"></div>
         <div class="field"><label>URL</label><input id="e-href" type="text"></div>
-        <div class="field"><label>Icon URL (or Dashboard-Icons Name)</label><input id="e-icon" type="text"></div>
+        <div class="field"><label>Icon URL</label><input id="e-icon" type="text"></div>
+
+        <div class="field-group" style="margin-top:20px;">
+            <label>API Integration</label>
+            <div class="field">
+                <label>Widget Type (What data to show?)</label>
+                <select id="e-widget">
+                    <option value="">None</option>
+                    <option value="arr_queue">Arr Stack Queue (Sonarr/Radarr)</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>API Key</label>
+                <input id="e-apikey" type="password" placeholder="Paste API Key here">
+            </div>
+        </div>
 
         <div class="actions-stack">
             <button id="save-service-btn" class="btn btn-primary">Save Changes</button>

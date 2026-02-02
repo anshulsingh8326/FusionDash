@@ -17,6 +17,15 @@
       "group": "Other",
       "href": "http://localhost:3001",
       "icon": "Homepage"
+    },
+    "Radarr": {
+      "name": "Radarr",
+      "group": "media",
+      "href": "http://localhost:7878",
+      "icon": "radarr",
+      "widgetType": "arr_queue",
+      "apiKey": "e8b404681c08407fb70467c381b1894d",
+      "pinned": true
     }
   },
   "manual": [],
