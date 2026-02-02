@@ -1,12 +1,60 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FusionDash</title>
     <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 </head>
 
 <body>
-    <div id="grid"></div>
+
+    <header>
+        <div class="brand">Fusion<span>Dash</span></div>
+        <input type="text" id="search" placeholder="Search apps...">
+        <button id="add-manual" class="add-btn" title="Add Manual App">+</button>
+    </header>
+
+    <div id="grid">
+    </div>
+
+    <div id="overlay"></div>
+
+    <div id="editor-side">
+        <h3>Edit Service</h3>
+
+        <div class="field">
+            <label>Display Name</label>
+            <input id="e-name" type="text" placeholder="e.g. Sonarr">
+        </div>
+
+        <div class="field">
+            <label>Group</label>
+            <input id="e-group" type="text" placeholder="e.g. Media">
+        </div>
+
+        <div class="field">
+            <label>URL (Link)</label>
+            <input id="e-href" type="text" placeholder="http://192.168.1.5:8989">
+        </div>
+
+        <div class="field">
+            <label>Icon (Emoji or text)</label>
+            <input id="e-icon" type="text" placeholder="📺">
+        </div>
+
+        <div class="field">
+            <label>API Key (Optional)</label>
+            <input id="e-apikey" type="text" placeholder="For Sonarr/Radarr stats">
+        </div>
+
+        <div style="margin-top: 20px; display: flex; gap: 10px;">
+            <button id="save-btn" class="btn" style="flex: 1;">Save Changes</button>
+        </div>
+    </div>
+
     <script src="app.js"></script>
 </body>
 

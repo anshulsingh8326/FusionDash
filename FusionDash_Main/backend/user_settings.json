@@ -1,0 +1,12 @@
+{
+  "overrides": {
+    "Prowlarr": {
+      "name": "Prowlarr",
+      "group": "media",
+      "href": "http://localhost:9696",
+      "icon": "prowlarr",
+      "apiKey": "574559feb5824af8861e0aa4f73e53bf"
+    }
+  },
+  "manual": []
+}
