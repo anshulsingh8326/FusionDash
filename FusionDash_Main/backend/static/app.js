@@ -1,357 +1,471 @@
+// --- STATE ---
 let allServices = [];
-let currentView = 'board'; 
+let boards = [];
+let activeBoardId = localStorage.getItem('fusion_active_board') || 'default';
+let currentView = 'board';
 let currentEditingId = null;
+
+// --- DOM CACHE ---
+const dom = {
+    layout: document.getElementById('main-layout'),
+    sidebar: document.getElementById('sidebar'),
+    boardList: document.getElementById('board-list'),
+    boardView: document.getElementById('board-view'),
+    libraryView: document.getElementById('library-view'),
+    pageTitle: document.getElementById('page-title'),
+    wallpaperLayer: document.getElementById('wallpaper-layer'),
+    wallpaperOverlay: document.getElementById('wallpaper-overlay'),
+    addBtnText: document.getElementById('add-btn-text'),
+    
+    // Modals
+    boardModal: document.getElementById('board-modal'),
+    pickerModal: document.getElementById('app-picker-modal'),
+    globalModal: document.getElementById('global-settings-modal'),
+    editorSide: document.getElementById('editor-side'),
+    overlay: document.getElementById('overlay'),
+    
+    // Inputs
+    bInputs: {
+        name: document.getElementById('b-name'),
+        wallpaper: document.getElementById('b-wallpaper'),
+        blur: document.getElementById('b-blur'),
+        opacity: document.getElementById('b-opacity'),
+        fit: document.getElementById('b-fit'),
+        cardSize: document.getElementById('b-cardsize'),
+        align: document.getElementById('b-align')
+    },
+    sInputs: {
+        name: document.getElementById('e-name'),
+        group: document.getElementById('e-group'),
+        href: document.getElementById('e-href'),
+        icon: document.getElementById('e-icon')
+    }
+};
 
 // --- INIT ---
 async function init() {
+    loadLocalState();
+    renderSidebar();
+
     try {
         const res = await fetch("/api/init");
-        if (!res.ok) throw new Error("API Failed");
-        const data = await res.json();
-        
-        applyTheme(data.theme);
-        
-        allServices = data.services || [];
-        allServices.sort((a, b) => (a.order || 100) - (b.order || 100));
-        
-        updateLibraryStats();
-
-        if(currentView === 'board') renderBoard();
-        else renderLibrary();
-
-    } catch (e) {
-        console.error("Init Error:", e);
-    }
+        if(res.ok) {
+            const data = await res.json();
+            allServices = data.services || [];
+            allServices.sort((a, b) => (a.order || 100) - (b.order || 100));
+            
+            updateLibraryStats();
+            
+            // Initial View Render
+            if(currentView === 'board') switchBoard(activeBoardId);
+            else renderLibrary();
+        }
+    } catch(e) { console.error("Backend fetch failed", e); }
 }
 
-function applyTheme(theme) {
-    if(!theme) return;
-    const root = document.documentElement;
-    if(theme.wallpaper) {
-        document.body.style.backgroundImage = `url('${theme.wallpaper}')`;
-        document.body.style.backgroundSize = "cover";
-        document.body.style.backgroundPosition = "center";
-    }
-    if(theme.accent) root.style.setProperty('--accent', theme.accent);
-    if(theme.glass) root.style.setProperty('--glass-opacity', theme.glass);
-    
-    // Fill Settings Modal
-    const wInput = document.getElementById("s-wallpaper");
-    if(wInput) {
-        wInput.value = theme.wallpaper || "";
-        document.getElementById("s-accent").value = theme.accent || "#007cff";
-        document.getElementById("s-glass").value = theme.glass || 0.7;
-    }
-}
-
-// --- VIEW SWITCHING ---
-window.switchView = function(viewName) {
-    currentView = viewName;
-    document.getElementById("board-view").classList.add("hidden");
-    document.getElementById("library-view").classList.add("hidden");
-    
-    document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));
-    
-    if (viewName === 'board') {
-        document.getElementById("board-view").classList.remove("hidden");
-        document.getElementById("page-title").innerText = "Main Board";
-        document.querySelector("#board-nav .nav-item").classList.add("active");
-        renderBoard();
+function loadLocalState() {
+    const saved = localStorage.getItem('fusion_boards');
+    if(saved) {
+        boards = JSON.parse(saved);
+        // Migration: Ensure 'items' array exists
+        boards.forEach(b => { if(!b.items) b.items = []; });
     } else {
-        document.getElementById("library-view").classList.remove("hidden");
-        document.getElementById("page-title").innerText = "App Library";
-        document.querySelector("#library-nav .nav-item").classList.add("active");
-        renderLibrary();
+        // DEFAULT: Empty board
+        boards = [{
+            id: 'default',
+            name: 'Home',
+            settings: { wallpaper: '', blur: 0, opacity: 0.5, fit: 'cover', cardSize: 'medium' },
+            items: [] 
+        }];
     }
 }
 
-// --- RENDER BOARD (Pinned Items Only) ---
-function renderBoard() {
-    const container = document.getElementById("board-view");
-    container.innerHTML = "";
+// --- VIEW LOGIC ---
+
+window.switchBoard = function(boardId) {
+    const board = boards.find(b => b.id === boardId);
+    if(!board) return switchBoard(boards[0].id);
+
+    activeBoardId = board.id;
+    currentView = 'board';
+    localStorage.setItem('fusion_active_board', activeBoardId);
+
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    const btn = document.querySelector(`.board-btn[data-id="${boardId}"]`);
+    if(btn) btn.classList.add('active');
+
+    dom.boardView.classList.remove('hidden');
+    dom.libraryView.classList.add('hidden');
+    dom.pageTitle.innerText = board.name;
+    dom.addBtnText.innerText = "Add App";
+
+    applyBoardSettings(board.settings);
+    renderBoard();
+};
+
+function applyBoardSettings(s) {
+    if(!s) return;
+    dom.wallpaperLayer.style.backgroundImage = s.wallpaper ? `url('${s.wallpaper}')` : 'none';
+    dom.wallpaperLayer.style.backgroundSize = s.fit || 'cover';
+    dom.wallpaperLayer.style.filter = `blur(${s.blur || 0}px)`;
+    dom.wallpaperOverlay.style.opacity = s.opacity || 0.5;
     
+    // Reset classes
+    dom.boardView.className = 'view-container';
+    if(s.align === 'center') dom.boardView.classList.add('align-center');
+}
+
+// --- RENDERERS ---
+
+function renderSidebar() {
+    dom.boardList.innerHTML = '';
+    boards.forEach(b => {
+        const btn = document.createElement('button');
+        btn.className = `nav-item board-btn ${b.id === activeBoardId && currentView === 'board' ? 'active' : ''}`;
+        btn.dataset.id = b.id;
+        btn.innerHTML = `<i class="ph ph-layout"></i> <span>${b.name}</span>`;
+        btn.onclick = () => switchBoard(b.id);
+        dom.boardList.appendChild(btn);
+    });
+}
+
+function renderBoard() {
+    dom.boardView.innerHTML = '';
+    const board = boards.find(b => b.id === activeBoardId);
     const term = document.getElementById("search").value.toLowerCase();
 
-    // FILTER: Must be PINNED (default true) + Search Term
-    const visibleApps = allServices.filter(s => {
-        if (s.pinned === false) return false; // Hide unpinned items from board
-        if (term && !s.name.toLowerCase().includes(term)) return false;
-        return true;
-    });
+    // Map IDs to Objects
+    let visible = [];
+    if (board.items && board.items.length > 0) {
+        visible = board.items
+            .map(id => allServices.find(s => s.id === id))
+            .filter(s => s !== undefined);
+    }
 
-    const groups = [...new Set(visibleApps.map(s => s.group || "Unsorted"))].sort();
+    if(term) visible = visible.filter(s => s.name.toLowerCase().includes(term));
+
+    const groups = [...new Set(visible.map(s => s.group || "General"))].sort();
 
     groups.forEach(groupName => {
-        const groupApps = visibleApps.filter(s => (s.group || "Unsorted") === groupName);
-        if (groupApps.length === 0) return;
+        const section = document.createElement('div');
+        section.className = 'board-section';
+        const gridClass = `grid-${board.settings.cardSize || 'medium'}`;
+        
+        section.innerHTML = `
+            <div class="section-header"><h4 class="section-title">${groupName}</h4></div>
+            <div class="section-grid ${gridClass}"></div>
+        `;
+        
+        const grid = section.querySelector('.section-grid');
+        // Drag-and-drop init
+        new Sortable(grid, { group: 'shared', animation: 150 });
 
-        const section = document.createElement("section");
-        section.className = "board-section";
-        section.innerHTML = `<h3 class="section-title">${groupName}</h3>`;
-        
-        const grid = document.createElement("div");
-        grid.className = "section-grid";
-        
-        groupApps.forEach(service => {
-            const card = createCard(service);
-            grid.appendChild(card);
-            checkStatus(service.id, service.href);
-            if(service.apiKey) fetchArrStats(service.id, service.href, service.apiKey);
+        visible.filter(s => (s.group || "General") === groupName).forEach(s => {
+            grid.appendChild(createCard(s));
         });
-
-        section.appendChild(grid);
-        container.appendChild(section);
+        
+        dom.boardView.appendChild(section);
     });
+    
+    // Empty State
+    if(visible.length === 0 && !term) {
+        dom.boardView.innerHTML = `
+            <div style="text-align:center; padding-top:100px; color:#666;">
+                <i class="ph ph-squares-four" style="font-size:48px; margin-bottom:10px;"></i>
+                <p>Board is empty</p>
+                <button onclick="openAppPicker()" class="btn btn-primary" style="margin-top:10px; width:auto;">
+                    Add App from Library
+                </button>
+            </div>
+        `;
+    }
 }
 
-// --- RENDER LIBRARY (Everything) ---
 function renderLibrary() {
-    const grid = document.getElementById("library-grid");
-    grid.innerHTML = "";
+    dom.libraryView.classList.remove('hidden');
+    dom.boardView.classList.add('hidden');
+    dom.pageTitle.innerText = "App Library";
+    dom.addBtnText.innerText = "New Service";
     
+    dom.wallpaperLayer.style.filter = "blur(10px)";
+
+    const grid = document.getElementById("library-grid");
+    grid.innerHTML = '';
     const term = document.getElementById("search").value.toLowerCase();
 
-    allServices.forEach(service => {
-        if (term && !service.name.toLowerCase().includes(term)) return;
-
-        // Pass 'true' for compact mode
-        const card = createCard(service, true);
-        grid.appendChild(card);
+    allServices.forEach(s => {
+        if(term && !s.name.toLowerCase().includes(term)) return;
+        grid.appendChild(createCard(s, true));
     });
 }
 
 function createCard(service, isCompact = false) {
-    const card = document.createElement("div");
-    card.className = isCompact ? "card compact" : "card";
-    card.dataset.id = service.id;
+    const card = document.createElement('div');
+    card.className = "card"; // CSS handles sizing based on parent grid
     
-    // Dim card if unpinned in Library view
-    if (isCompact && service.pinned === false) {
-        card.style.opacity = "0.6";
+    let iconHTML = `<i class="ph ph-cube" style="font-size:32px;"></i>`;
+    if(service.icon) {
+        iconHTML = `<img src="${service.icon}" onerror="this.style.display='none'">`;
+        if(!service.icon.includes('/') && !service.icon.includes('.')) {
+             const url = `https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${service.icon.toLowerCase()}.png`;
+             iconHTML = `<img src="${url}" onerror="this.src='https://unpkg.com/@phosphor-icons/core/assets/duotone/cube-duotone.svg'">`;
+        }
     }
 
-    const iconHtml = getIconHtml(service.icon, service.name);
-    
-    // Pin indicator for Library view
-    const pinIndicator = (isCompact && service.pinned !== false) 
-        ? `<i class="ph-fill ph-push-pin" style="position:absolute; top:5px; left:5px; color:var(--accent); font-size:12px;"></i>` 
-        : '';
-
     card.innerHTML = `
-        ${pinIndicator}
-        <div class="status-dot" id="status-${service.id}"></div>
-        <div class="icon-box">${iconHtml}</div>
-        <div class="info">
-            <div class="name" title="${service.name}">${service.name}</div>
-            ${!isCompact ? `<div class="group">${service.group || 'Apps'}</div>` : ''}
-            <div class="stats" id="stats-${service.id}"></div>
+        <div class="status-dot js-status-${service.id}"></div>
+        ${iconHTML}
+        <div class="card-name">${service.name}</div>
+        <div class="edit-trigger" onclick="window.editService('${service.id}', event)">
+            <i class="ph-bold ph-dots-three-vertical"></i>
         </div>
-        <button class="edit-btn"><i class="ph ph-dots-three-vertical"></i></button>
     `;
 
-    card.onclick = () => { if(service.href) window.open(service.href, "_blank"); };
-    
-    const editBtn = card.querySelector(".edit-btn");
-    editBtn.onclick = (e) => {
-        e.stopPropagation();
-        openEditor(service);
+    card.onclick = (e) => {
+        if(e.target.closest('.edit-trigger')) return;
+        if(service.href) window.open(service.href, '_blank');
     };
 
+    setTimeout(() => checkStatus(service.id, service.href), 100);
     return card;
 }
 
-function updateLibraryStats() {
-    document.getElementById("total-count").innerText = allServices.length;
-    const pinnedCount = allServices.filter(s => s.pinned !== false).length;
-    document.getElementById("arr-count").innerText = pinnedCount; // Re-purposed to "Pinned"
-    document.getElementById("arr-label").innerText = "Pinned Apps";
-}
-
-// --- HELPERS ---
-function getIconHtml(iconStr, appName) {
-    if (iconStr && (iconStr.includes("/") || iconStr.includes(".") || iconStr.startsWith("http"))) {
-        return `<img src="${iconStr}" alt="${appName}" onerror="this.style.display='none'">`;
-    }
-    const name = appName ? appName.toLowerCase() : "";
-    if (!iconStr) {
-        if (name.includes("sonarr")) return "📺";
-        if (name.includes("radarr")) return "🎬";
-        if (name.includes("prowlarr")) return "🔍";
-        if (name.includes("lidarr")) return "🎵";
-        if (name.includes("transmission") || name.includes("qbit")) return "📥";
-        if (name.includes("plex") || name.includes("jellyfin")) return "🍿";
-        if (name.includes("portainer")) return "🐳";
-        return "📦";
-    }
-    return `<span style="font-size: 32px;">${iconStr}</span>`;
-}
-
-async function checkStatus(id, url) {
-    if(!url || url === "#") {
-        const d = document.getElementById(`status-${id}`);
-        if(d) d.style.display = 'none';
-        return;
-    }
-    const dot = document.getElementById(`status-${id}`);
-    if(!dot) return;
-
-    try {
-        const res = await fetch(`/api/status/ping?url=${encodeURIComponent(url)}&_=${Date.now()}`);
-        const data = await res.json();
-        if (data.status === "online") {
-            dot.className = "status-dot online";
-        } else {
-            dot.className = "status-dot offline";
-        }
-    } catch {
-        dot.className = "status-dot offline";
-    }
-}
-
-async function fetchArrStats(id, url, key) {
-    const statsDiv = document.getElementById(`stats-${id}`);
-    if(!statsDiv) return;
-    try {
-        const res = await fetch(`/api/integration/arr/queue?url=${encodeURIComponent(url)}&api_key=${key}`);
-        const data = await res.json();
-        if(data.count > 0) {
-            statsDiv.innerHTML = `<span class="badge">${data.count} Active</span>`;
-        }
-    } catch(e) {}
-}
-
-// --- MODALS ---
-function openEditor(service) {
-    if(!service) {
-        // Add New
-        currentEditingId = null;
-        document.getElementById("e-name").value = "";
-        document.getElementById("e-group").value = "Unsorted";
-        document.getElementById("e-href").value = "http://";
-        document.getElementById("e-icon").value = "";
-        document.getElementById("e-apikey").value = "";
-        // Hide Pin/Hide buttons for new creation
-        document.getElementById("pin-btn").style.display = "none";
-        document.getElementById("hide-btn").style.display = "none";
-    } else {
-        // Edit Existing
-        currentEditingId = service.id;
-        document.getElementById("e-name").value = service.name;
-        document.getElementById("e-group").value = service.group || "";
-        document.getElementById("e-href").value = service.href;
-        document.getElementById("e-icon").value = service.icon || "";
-        document.getElementById("e-apikey").value = service.apiKey || "";
-
-        // Toggle Pin Button Text
-        const pinBtn = document.getElementById("pin-btn");
-        pinBtn.style.display = "block";
-        if (service.pinned === false) {
-            pinBtn.innerText = "📌 Pin to Board";
-            pinBtn.classList.remove("btn-danger");
-            pinBtn.classList.add("btn-secondary");
-        } else {
-            pinBtn.innerText = "❌ Unpin from Board";
-            pinBtn.classList.add("btn-danger");
-            pinBtn.classList.remove("btn-secondary");
+// --- PICKER (ADD APP) ---
+window.openAppPicker = function() {
+    const board = boards.find(b => b.id === activeBoardId);
+    const pickerList = document.getElementById('picker-list');
+    pickerList.innerHTML = '';
+    
+    // Filter apps NOT on this board
+    const available = allServices.filter(s => !board.items.includes(s.id));
+    
+    available.forEach(s => {
+        const item = document.createElement('div');
+        item.className = 'picker-item';
+        
+        let iconSrc = s.icon;
+        if(s.icon && !s.icon.includes('/') && !s.icon.includes('.')) {
+            iconSrc = `https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${s.icon.toLowerCase()}.png`;
         }
         
-        document.getElementById("hide-btn").style.display = "block";
-    }
-    document.getElementById("editor-side").classList.add("open");
-    document.getElementById("overlay").classList.add("visible");
-}
-
-function closeOverlays() {
-    document.getElementById("editor-side").classList.remove("open");
-    document.getElementById("settings-modal").classList.remove("active");
-    document.getElementById("overlay").classList.remove("visible");
-}
-
-// --- EVENTS ---
-
-// SAVE
-document.getElementById("save-btn").onclick = async () => {
-    const data = {
-        name: document.getElementById("e-name").value,
-        group: document.getElementById("e-group").value,
-        href: document.getElementById("e-href").value,
-        icon: document.getElementById("e-icon").value,
-        apiKey: document.getElementById("e-apikey").value
-    };
-    const url = currentEditingId ? `/api/services/${currentEditingId}/update` : `/api/services/add_manual`;
-    await fetch(url, { method: "POST", body: JSON.stringify(data), headers: { "Content-Type": "application/json" } });
-    closeOverlays();
-    init();
-};
-
-// PIN / UNPIN TOGGLE
-document.getElementById("pin-btn").onclick = async () => {
-    if(!currentEditingId) return;
-    const service = allServices.find(s => s.id === currentEditingId);
-    const newStatus = service.pinned === false ? true : false;
-    
-    // We send Name + Pinned Status
-    const data = { 
-        name: service.name, 
-        pinned: newStatus 
-    };
-    
-    await fetch(`/api/services/${currentEditingId}/update`, { 
-        method: "POST", 
-        body: JSON.stringify(data), 
-        headers: { "Content-Type": "application/json" } 
+        item.innerHTML = `
+            <img src="${iconSrc}" onerror="this.style.display='none'">
+            <span>${s.name}</span>
+        `;
+        
+        item.onclick = () => {
+            board.items.push(s.id);
+            saveBoards();
+            renderBoard();
+            closeModals();
+        };
+        
+        pickerList.appendChild(item);
     });
     
-    closeOverlays();
+    if(available.length === 0) {
+        pickerList.innerHTML = '<div style="grid-column:1/-1; color:#666; text-align:center;">All library apps are already here.</div>';
+    }
+
+    dom.overlay.classList.add('active');
+    dom.pickerModal.classList.add('active');
+};
+
+document.getElementById('btn-create-new').onclick = () => {
+    closeModals();
+    openEditor(null);
+};
+
+
+// --- SETTINGS & EDITING ---
+window.editService = function(id, e) {
+    if(e) e.stopPropagation();
+    const service = allServices.find(s => s.id === id);
+    if(!service) return;
+
+    currentEditingId = id;
+    dom.sInputs.name.value = service.name;
+    dom.sInputs.group.value = service.group || "General";
+    dom.sInputs.href.value = service.href;
+    dom.sInputs.icon.value = service.icon || "";
+
+    const delBtn = document.getElementById('delete-service-btn');
+    if(currentView === 'board') {
+        delBtn.innerText = "Remove from Board";
+        delBtn.classList.remove('btn-danger');
+        delBtn.classList.add('btn-secondary');
+    } else {
+        delBtn.innerText = "Uninstall Service";
+        delBtn.classList.add('btn-danger');
+        delBtn.classList.remove('btn-secondary');
+    }
+
+    dom.overlay.classList.add('active');
+    dom.editorSide.classList.add('active');
+};
+
+document.getElementById('delete-service-btn').onclick = async () => {
+    if(!currentEditingId) return;
+    
+    if(currentView === 'board') {
+        const board = boards.find(b => b.id === activeBoardId);
+        board.items = board.items.filter(id => id !== currentEditingId);
+        saveBoards();
+        renderBoard();
+        closeModals();
+    } else {
+        if(!confirm("Permanently uninstall this service?")) return;
+        boards.forEach(b => {
+            if(b.items) b.items = b.items.filter(id => id !== currentEditingId);
+        });
+        saveBoards();
+        await fetch(`/api/services/${currentEditingId}/hide`, { method: "POST" });
+        closeModals();
+        init();
+    }
+};
+
+document.getElementById('save-service-btn').onclick = async () => {
+    const payload = {
+        name: dom.sInputs.name.value,
+        group: dom.sInputs.group.value,
+        href: dom.sInputs.href.value,
+        icon: dom.sInputs.icon.value,
+        pinned: true
+    };
+    
+    const url = currentEditingId 
+        ? `/api/services/${currentEditingId}/update`
+        : `/api/services/add_manual`;
+
+    await fetch(url, { method: "POST", body: JSON.stringify(payload), headers: {'Content-Type': 'application/json'} });
+    closeModals();
     init();
 };
 
-// RESET BUTTON LOGIC
-const resetBtn = document.getElementById("reset-btn");
-if(resetBtn) {
-    resetBtn.onclick = async () => {
-        if(confirm("⚠ WARNING: This will delete ALL settings.\n\n- All manual apps will be deleted.\n- All custom names/icons will be lost.\n- Hidden apps will reappear.\n\nAre you sure?")) {
-            try {
-                await fetch("/api/settings/reset", { method: "POST" });
-                // Force reload to clear cache and fetch fresh defaults
-                window.location.reload();
-            } catch(e) {
-                alert("Reset failed: " + e);
-            }
-        }
-    };
+function saveBoards() {
+    localStorage.setItem('fusion_boards', JSON.stringify(boards));
 }
 
-// GLOBAL HIDE (Uninstall)
-document.getElementById("hide-btn").onclick = async () => {
-    if(!currentEditingId) return;
-    if(!confirm("Permanently hide this app from Library and Board? (Like uninstalling)")) return;
-    
-    await fetch(`/api/services/${currentEditingId}/hide`, { method: "POST" });
-    closeOverlays();
-    init();
+// --- GLOBAL SETTINGS ---
+document.getElementById('nav-settings').onclick = () => {
+    dom.overlay.classList.add('active');
+    dom.globalModal.classList.add('active');
 };
 
-document.getElementById("add-manual").onclick = () => openEditor(null);
-document.getElementById("search").oninput = () => {
+document.getElementById('btn-hard-reset').onclick = () => {
+    if(confirm("Are you sure? This will delete all boards.")) {
+        localStorage.removeItem('fusion_boards');
+        localStorage.removeItem('fusion_active_board');
+        location.reload();
+    }
+};
+
+// --- EVENT LISTENERS ---
+document.getElementById('add-service-btn').onclick = () => {
+    if(currentView === 'board') openAppPicker();
+    else openEditor(null);
+};
+
+function openEditor(serviceId) {
+    currentEditingId = serviceId;
+    dom.sInputs.name.value = "";
+    dom.sInputs.href.value = "http://";
+    dom.overlay.classList.add('active');
+    dom.editorSide.classList.add('active');
+}
+
+document.getElementById('sidebar-toggle').onclick = () => dom.sidebar.classList.toggle('collapsed');
+document.getElementById('nav-library').onclick = () => {
+    currentView = 'library';
+    renderLibrary();
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    document.getElementById('nav-library').classList.add('active');
+};
+
+// Close Handlers
+function closeModals() {
+    document.querySelectorAll('.modal, #editor-side, #overlay').forEach(el => el.classList.remove('active', 'open', 'visible'));
+}
+dom.overlay.onclick = closeModals;
+document.querySelectorAll('.close-modal').forEach(b => b.onclick = closeModals);
+document.getElementById('close-editor').onclick = closeModals;
+
+// Board Settings
+document.getElementById('board-settings-btn').onclick = () => {
+    const board = boards.find(b => b.id === activeBoardId);
+    dom.bInputs.name.value = board.name;
+    const s = board.settings;
+    dom.bInputs.wallpaper.value = s.wallpaper;
+    dom.bInputs.align.value = s.align;
+    dom.bInputs.cardSize.value = s.cardSize;
+    dom.bInputs.blur.value = s.blur;
+    dom.bInputs.opacity.value = s.opacity;
+    dom.bInputs.fit.value = s.fit;
+    dom.overlay.classList.add('active');
+    dom.boardModal.classList.add('active');
+};
+
+document.getElementById('save-board-btn').onclick = () => {
+    const board = boards.find(b => b.id === activeBoardId);
+    board.name = dom.bInputs.name.value;
+    board.settings.wallpaper = dom.bInputs.wallpaper.value;
+    board.settings.align = dom.bInputs.align.value;
+    board.settings.cardSize = dom.bInputs.cardSize.value;
+    board.settings.blur = dom.bInputs.blur.value;
+    board.settings.opacity = dom.bInputs.opacity.value;
+    board.settings.fit = dom.bInputs.fit.value;
+    
+    saveBoards();
+    switchBoard(activeBoardId);
+    closeModals();
+};
+
+document.getElementById('create-board-btn').onclick = () => {
+    const newId = 'b_' + Date.now();
+    boards.push({ 
+        id: newId, 
+        name: 'New Board', 
+        settings: { cardSize: 'medium' }, 
+        items: [] 
+    });
+    saveBoards();
+    renderSidebar();
+    switchBoard(newId);
+};
+
+document.getElementById('delete-board-btn').onclick = () => {
+    if(boards.length <= 1) return alert("Cannot delete the only board.");
+    if(!confirm("Delete this board?")) return;
+    boards = boards.filter(b => b.id !== activeBoardId);
+    saveBoards();
+    switchBoard(boards[0].id);
+    renderSidebar();
+    closeModals();
+};
+
+// Search
+document.getElementById('search').oninput = () => {
     if(currentView === 'board') renderBoard();
     else renderLibrary();
 };
-document.getElementById("open-settings").onclick = () => {
-    document.getElementById("settings-modal").classList.add("active");
-    document.getElementById("overlay").classList.add("visible");
-};
-document.getElementById("save-theme-btn").onclick = async () => {
-    const data = {
-        wallpaper: document.getElementById("s-wallpaper").value,
-        accent: document.getElementById("s-accent").value,
-        glass: document.getElementById("s-glass").value
-    };
-    await fetch("/api/settings/theme", { method: "POST", body: JSON.stringify(data), headers: { "Content-Type": "application/json" } });
-    applyTheme(data);
-    closeOverlays();
-};
-document.getElementById("overlay").onclick = closeOverlays;
-document.getElementById("close-settings").onclick = closeOverlays;
+
+// Status Utils
+async function checkStatus(id, url) {
+    const dots = document.querySelectorAll(`.js-status-${id}`);
+    if(!url || dots.length === 0) return;
+    try {
+        const res = await fetch(`/api/status/ping?url=${encodeURIComponent(url)}`);
+        const data = await res.json();
+        dots.forEach(d => {
+            d.className = `status-dot js-status-${id} ${data.status === 'online' ? 'online' : 'offline'}`;
+        });
+    } catch(e) {}
+}
+
+function updateLibraryStats() {
+     const el = document.getElementById('total-count');
+     if(el) el.innerText = allServices.length;
+}
 
 init();

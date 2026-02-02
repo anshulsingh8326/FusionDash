@@ -2,7 +2,10 @@
   "overrides": {
     "Open Webui": {
       "name": "Open Webui",
-      "pinned": false
+      "pinned": true,
+      "group": "Other",
+      "href": "http://localhost:3000",
+      "icon": "Open Webui"
     },
     "Test Nginx": {
       "name": "Test Nginx",
@@ -10,7 +13,10 @@
     },
     "Homepage": {
       "name": "Homepage",
-      "pinned": false
+      "pinned": true,
+      "group": "Other",
+      "href": "http://localhost:3001",
+      "icon": "Homepage"
     }
   },
   "manual": [],

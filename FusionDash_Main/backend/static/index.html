@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FusionBoard</title>
+    <title>FusionDash</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
@@ -12,59 +12,74 @@
 
 <body>
 
-    <div class="layout">
+    <div id="wallpaper-layer"></div>
+    <div id="wallpaper-overlay"></div>
+
+    <div class="layout" id="main-layout">
         <aside id="sidebar">
-            <div class="brand">
-                <i class="ph-fill ph-hexagon" style="color:var(--accent)"></i>
-                <span>FusionBoard</span>
+            <div class="sidebar-header">
+                <div class="brand">
+                    <i class="ph-fill ph-hexagon" style="color:var(--accent-orange)"></i>
+                    <span class="brand-text">FusionDash</span>
+                </div>
+                <button id="sidebar-toggle" class="btn-ghost">
+                    <i class="ph-bold ph-caret-double-left"></i>
+                </button>
             </div>
 
             <nav id="board-nav">
-                <div class="nav-label">MY BOARDS</div>
-                <button class="nav-item active" onclick="switchView('board')">
-                    <i class="ph ph-layout"></i> Main Board
+                <div class="nav-label">BOARDS</div>
+                <div id="board-list">
+                </div>
+                <button class="nav-item add-btn" id="create-board-btn">
+                    <i class="ph-bold ph-plus"></i>
+                    <span>New Board</span>
                 </button>
             </nav>
 
-            <nav id="library-nav" style="margin-top: 20px;">
+            <nav id="system-nav">
                 <div class="nav-label">SYSTEM</div>
-                <button class="nav-item" onclick="switchView('library')">
-                    <i class="ph ph-books"></i> All Apps (Library)
+                <button class="nav-item" id="nav-library">
+                    <i class="ph ph-books"></i> <span>App Library</span>
+                </button>
+                <button class="nav-item" id="nav-settings">
+                    <i class="ph ph-sliders"></i> <span>System Settings</span>
                 </button>
             </nav>
 
             <div class="sidebar-footer">
-                <button id="open-settings" class="nav-item">
-                    <i class="ph ph-gear"></i> Settings
-                </button>
+                <div class="footer-info">FusionHex Dashboard v1.2</div>
             </div>
         </aside>
 
         <main>
             <header>
-                <h2 id="page-title">Main Board</h2>
+                <div class="header-left">
+                    <h2 id="page-title">Loading...</h2>
+                    <button class="btn-icon-small" id="board-settings-btn" title="Board Appearance">
+                        <i class="ph-bold ph-pencil-simple"></i>
+                    </button>
+                </div>
+
                 <div class="header-actions">
                     <div class="search-bar">
                         <i class="ph ph-magnifying-glass"></i>
-                        <input type="text" id="search" placeholder="Search...">
+                        <input type="text" id="search" placeholder="Quick find...">
                     </div>
-                    <button id="add-manual" class="btn-icon" title="Add Link">
-                        <i class="ph ph-plus"></i>
+                    <button id="add-service-btn" class="btn-accent">
+                        <i class="ph-bold ph-plus"></i> <span id="add-btn-text">Add App</span>
                     </button>
                 </div>
             </header>
 
-            <div id="board-view" class="view-container"></div>
+            <div id="board-view" class="view-container">
+            </div>
 
             <div id="library-view" class="view-container hidden">
                 <div class="library-stats">
                     <div class="stat-card">
                         <span id="total-count">0</span>
-                        <label>Total Services</label>
-                    </div>
-                    <div class="stat-card">
-                        <span id="arr-count">0</span>
-                        <label id="arr-label">Pinned Apps</label>
+                        <label>Total Apps in Library</label>
                     </div>
                 </div>
                 <div id="library-grid" class="grid-compact"></div>
@@ -73,40 +88,116 @@
     </div>
 
     <div id="overlay"></div>
-    <div id="editor-side">
-        <h3>Edit App</h3>
-        <div class="field"><label>Display Name</label><input id="e-name" type="text"></div>
-        <div class="field"><label>Group</label><input id="e-group" type="text"></div>
-        <div class="field"><label>URL</label><input id="e-href" type="text"></div>
-        <div class="field"><label>Icon</label><input id="e-icon" type="text"></div>
-        <div class="field"><label>API Key</label><input id="e-apikey" type="text"></div>
 
-        <div class="actions-stack">
-            <button id="save-btn" class="btn btn-primary">Save Changes</button>
+    <div id="board-modal" class="modal">
+        <div class="modal-header">
+            <h3>Board Appearance</h3>
+            <button class="close-modal"><i class="ph ph-x"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="field">
+                <label>Board Name</label>
+                <input id="b-name" type="text" placeholder="e.g. Home Lab">
+            </div>
 
-            <button id="pin-btn" class="btn btn-secondary">Unpin from Board</button>
+            <div class="field-group">
+                <label>Wallpaper Setup</label>
+                <input id="b-wallpaper" type="text" placeholder="Image URL">
 
-            <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 10px 0;"></div>
+                <div class="control-row">
+                    <div class="sub-field">
+                        <label>Blur</label>
+                        <input id="b-blur" type="range" min="0" max="20" step="1">
+                    </div>
+                    <div class="sub-field">
+                        <label>Dim</label>
+                        <input id="b-opacity" type="range" min="0" max="0.9" step="0.1">
+                    </div>
+                </div>
+                <div class="sub-field" style="margin-top:10px;">
+                    <label>Image Fit</label>
+                    <select id="b-fit">
+                        <option value="cover">Cover (Fill)</option>
+                        <option value="contain">Contain (Fit)</option>
+                    </select>
+                </div>
+            </div>
 
-            <button id="hide-btn" class="btn btn-text-danger">Hide from Library (Uninstall)</button>
+            <div class="field-group">
+                <label>Layout Options</label>
+                <div class="control-row">
+                    <div class="sub-field">
+                        <label>Card Size</label>
+                        <select id="b-cardsize">
+                            <option value="small">Small</option>
+                            <option value="medium">Medium</option>
+                            <option value="large">Large</option>
+                        </select>
+                    </div>
+                    <div class="sub-field">
+                        <label>Alignment</label>
+                        <select id="b-align">
+                            <option value="left">Left</option>
+                            <option value="center">Center</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="delete-board-btn" class="btn btn-danger-text">Delete Board</button>
+            <button id="save-board-btn" class="btn btn-primary">Save Changes</button>
         </div>
     </div>
 
-    <div id="settings-modal">
-        <h3>Dashboard Settings</h3>
-        <div class="field"><label>Wallpaper URL</label><input id="s-wallpaper" type="text"></div>
-        <div class="field"><label>Accent Color</label><input id="s-accent" type="color" style="height:40px"></div>
-        <div class="field"><label>Glass Opacity</label><input id="s-glass" type="range" min="0.1" max="1" step="0.1">
+    <div id="app-picker-modal" class="modal">
+        <div class="modal-header">
+            <h3>Add App to Board</h3>
+            <button class="close-modal"><i class="ph ph-x"></i></button>
         </div>
-        <button id="save-theme-btn" class="btn btn-primary" style="width:100%">Save Theme</button>
-        
-        <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
-        
-        <button id="reset-btn" class="btn btn-danger" style="width:100%">
-            <i class="ph-bold ph-trash"></i> Reset Everything to Default
-        </button>
-        
-        <button id="close-settings" class="btn btn-text" style="width:100%; margin-top:10px">Close</button>
+        <div class="modal-body">
+            <div id="picker-list" class="picker-grid">
+            </div>
+            <div class="picker-footer">
+                <p style="font-size:0.8rem; color:#666; margin-bottom:10px;">App not in Library?</p>
+                <button id="btn-create-new" class="btn btn-primary" style="width: auto;">
+                    <i class="ph-bold ph-plus"></i> Create Manual Service
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="global-settings-modal" class="modal">
+        <div class="modal-header">
+            <h3>System Settings</h3>
+            <button class="close-modal"><i class="ph ph-x"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="field-group">
+                <label>Data Management</label>
+                <p style="font-size: 0.8rem; color: #888; margin-bottom: 15px; line-height: 1.4;">
+                    Resetting will clear all your custom Boards and layouts. Your services will remain in the Library
+                    (backend).
+                </p>
+                <button id="btn-hard-reset" class="btn btn-danger" style="width:100%">
+                    <i class="ph-bold ph-trash"></i> Reset All Board Data
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="editor-side">
+        <h3>Edit Service</h3>
+        <div class="field"><label>Display Name</label><input id="e-name" type="text"></div>
+        <div class="field"><label>Group (Section)</label><input id="e-group" type="text"></div>
+        <div class="field"><label>URL</label><input id="e-href" type="text"></div>
+        <div class="field"><label>Icon URL (or Dashboard-Icons Name)</label><input id="e-icon" type="text"></div>
+
+        <div class="actions-stack">
+            <button id="save-service-btn" class="btn btn-primary">Save Changes</button>
+            <div style="height:1px; background:rgba(255,255,255,0.1); margin:5px 0;"></div>
+            <button id="delete-service-btn" class="btn btn-secondary">Remove</button>
+            <button id="close-editor" class="btn btn-text">Cancel</button>
         </div>
     </div>
 
