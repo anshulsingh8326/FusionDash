@@ -18,6 +18,7 @@ def reset_settings():
     if DATA_FILE.exists():
         os.remove(DATA_FILE)
     return {"status": "reset"}
+
 # --- HELPER FUNCTIONS ---
 
 def load_settings():
@@ -149,6 +150,7 @@ def update_theme(payload: dict = Body(...)):
 
 @app.get("/api/status/ping")
 def ping_service(url: str):
+    if not url: return {"status": "offline"}
     try:
         resp = requests.get(url, timeout=2, verify=False)
         if resp.status_code < 500:

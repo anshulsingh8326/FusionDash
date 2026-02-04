@@ -6,6 +6,9 @@ let activeBoardId = localStorage.getItem('fusion_active_board') || 'default';
 let currentView = 'board';
 let currentEditingId = null;
 
+// Track active status for summary box
+let statusTracker = {};
+
 // --- DOM CACHE ---
 const dom = {
     layout: document.getElementById('main-layout'),
@@ -17,6 +20,7 @@ const dom = {
     boardList: document.getElementById('board-list'),
     boardView: document.getElementById('board-view'),
     libraryView: document.getElementById('library-view'),
+    statusBar: document.getElementById('status-bar'), // New
     pageTitle: document.getElementById('page-title'),
     addBtnText: document.getElementById('add-btn-text'),
     
@@ -39,7 +43,7 @@ const dom = {
         fit: document.getElementById('b-fit'),
         cardSize: document.getElementById('b-cardsize'),
         align: document.getElementById('b-align'),
-        style: document.getElementById('b-style') // New
+        style: document.getElementById('b-style')
     },
     // Inputs (Service)
     sInputs: {
@@ -74,6 +78,7 @@ async function init() {
             allServices.sort((a, b) => (a.order || 100) - (b.order || 100));
             
             updateLibraryStats();
+            renderStatusSummary(); // Init summary box
             
             if(currentView === 'board') switchBoard(activeBoardId);
             else renderLibrary();
@@ -173,11 +178,48 @@ function renderSidebar() {
     });
 }
 
+function renderStatusSummary() {
+    // Categorize services
+    const summary = {};
+    
+    allServices.forEach(s => {
+        // Use source (docker/manual) or create "Web" if manual
+        let type = s.source === 'docker' ? 'Docker' : 'Web/Apps';
+        if (!summary[type]) summary[type] = { total: 0, online: 0, offline: 0 };
+        
+        summary[type].total++;
+        
+        // Check current tracker state
+        const state = statusTracker[s.id];
+        if (state === 'online') summary[type].online++;
+        else if (state === 'offline') summary[type].offline++;
+    });
+
+    dom.statusBar.innerHTML = '';
+    
+    Object.keys(summary).forEach(type => {
+        const data = summary[type];
+        const icon = type === 'Docker' ? 'ph-docker-logo' : 'ph-globe';
+        
+        const html = `
+            <div class="status-pill">
+                <i class="ph ${icon}"></i>
+                <span>${type}</span>
+                <div class="status-counts">
+                    <span title="Online" class="count-online">● ${data.online}</span>
+                    <span title="Offline" class="count-offline">● ${data.offline}</span>
+                    <span title="Total" style="color:#666">/ ${data.total}</span>
+                </div>
+            </div>
+        `;
+        dom.statusBar.innerHTML += html;
+    });
+}
+
 function renderBoard() {
     dom.boardView.innerHTML = '';
     const board = boards.find(b => b.id === activeBoardId);
     
-    // Mobile Overlay Check
     if(!document.getElementById('mobile-overlay')) {
         const mo = document.createElement('div');
         mo.id = 'mobile-overlay';
@@ -188,8 +230,7 @@ function renderBoard() {
         document.body.appendChild(mo);
     }
 
-    // Apply Styles to Container
-    dom.boardView.className = 'view-container'; // Reset
+    dom.boardView.className = 'view-container'; 
     if(board.settings.style) dom.boardView.classList.add(`style-${board.settings.style}`);
     if(board.settings.align === 'center') dom.boardView.classList.add('align-center');
 
@@ -284,7 +325,7 @@ function createCard(service, isCompact = false) {
     };
 
     setTimeout(() => {
-        checkStatus(service.id, service.href);
+        checkStatus(service.id, service.href, service.state);
         if(service.widgetType && service.apiKey) {
             fetchWidgetData(service);
         }
@@ -349,11 +390,10 @@ window.openAppPicker = function() {
 };
 document.getElementById('btn-create-new').onclick = () => { closeModals(); openEditor(null); };
 
-// --- EDITOR LOGIC (FIXED) ---
+// --- EDITOR LOGIC ---
 window.editService = function(id, e) {
     if(e) e.stopPropagation();
     
-    // FIX: Always search ALL services to prevent "Board 1" data leak
     const service = allServices.find(s => s.id === id);
     if(!service) { console.error("Service not found"); return; }
 
@@ -375,7 +415,7 @@ window.editService = function(id, e) {
     const delBtn = document.getElementById('delete-service-btn');
     if(currentView === 'board') {
         delBtn.innerText = "Remove from Board";
-        delBtn.className = 'btn btn-secondary'; // Helper class for style
+        delBtn.className = 'btn btn-secondary';
     } else {
         delBtn.innerText = "Uninstall Service";
         delBtn.className = 'btn btn-danger';
@@ -446,7 +486,6 @@ document.getElementById('btn-hard-reset').onclick = () => {
 };
 
 // --- EVENT LISTENERS ---
-// Sidebar Toggle (Mobile vs Desktop)
 document.getElementById('sidebar-toggle').onclick = () => {
     if(window.innerWidth <= 768) {
         dom.sidebar.classList.toggle('mobile-open');
@@ -472,7 +511,6 @@ dom.overlay.onclick = closeModals;
 document.querySelectorAll('.close-modal').forEach(b => b.onclick = closeModals);
 document.getElementById('close-editor').onclick = closeModals;
 
-// Board Settings
 document.getElementById('board-settings-btn').onclick = () => {
     const board = boards.find(b => b.id === activeBoardId);
     dom.bInputs.name.value = board.name;
@@ -512,14 +550,32 @@ document.getElementById('delete-board-btn').onclick = () => {
 };
 document.getElementById('search').oninput = () => { if(currentView === 'board') renderBoard(); else renderLibrary(); };
 
-async function checkStatus(id, url) {
+async function checkStatus(id, url, dockerState) {
     const dots = document.querySelectorAll(`.js-status-${id}`);
-    if(!url || dots.length === 0) return;
-    try {
-        const res = await fetch(`/api/status/ping?url=${encodeURIComponent(url)}`);
-        const data = await res.json();
-        dots.forEach(d => { d.className = `status-dot js-status-${id} ${data.status === 'online' ? 'online' : 'offline'}`; });
-    } catch(e) {}
+    if(dots.length === 0) return;
+    
+    let isOnline = false;
+
+    // Fast check: If Docker says it's not running, it's offline.
+    if(dockerState && dockerState !== 'running') {
+        isOnline = false;
+    } else if(url) {
+        try {
+            const res = await fetch(`/api/status/ping?url=${encodeURIComponent(url)}`);
+            const data = await res.json();
+            isOnline = (data.status === 'online');
+        } catch(e) {}
+    }
+
+    dots.forEach(d => { 
+        d.className = `status-dot js-status-${id} ${isOnline ? 'online' : 'offline'}`; 
+    });
+
+    // Update global tracker
+    statusTracker[id] = isOnline ? 'online' : 'offline';
+    
+    // Refresh summary box
+    renderStatusSummary();
 }
 function updateLibraryStats() { const el = document.getElementById('total-count'); if(el) el.innerText = allServices.length; }
 

@@ -33,10 +33,16 @@ def detect_arr(container):
     return None
 
 def scan_containers():
-    client = docker.from_env()
+    try:
+        client = docker.from_env()
+    except Exception as e:
+        print(f"Docker connection failed: {e}")
+        return []
+
     results = []
 
-    for c in client.containers.list():
+    # CHANGE: all=True fetches stopped/exited containers too
+    for c in client.containers.list(all=True):
         # Get Ports
         ports = c.attrs.get("NetworkSettings", {}).get("Ports", {})
         published_ports = []
@@ -56,11 +62,6 @@ def scan_containers():
         detected = detect_arr(c)
 
         # 3. Determine Group & Name
-        # Priority: Label > Detection > Default
-        enabled = labels.get("fusiondash.enable") == "true"
-        
-        # --- CHANGE: We now accept EVERYTHING, not just enabled/detected ---
-        
         results.append(build_entry(
             container=c,
             ports=published_ports,
@@ -106,7 +107,7 @@ def build_entry(container, ports, labels, detected):
     elif detected:
         icon = detected["icon"]
     else:
-        icon = "" # Frontend will handle default box icon
+        icon = "" 
 
     # Group Logic
     if labels.get("fusiondash.group"):
@@ -117,6 +118,9 @@ def build_entry(container, ports, labels, detected):
         group = "Other"
 
     order = int(labels.get("fusiondash.order", 999))
+    
+    # State Logic
+    state = container.status # 'running', 'exited', 'created'
 
     return {
         "id": container.id,
@@ -128,4 +132,5 @@ def build_entry(container, ports, labels, detected):
         "ports": ports,
         "order": order,
         "source": "docker",
+        "state": state # Pass exact state to frontend
     }
