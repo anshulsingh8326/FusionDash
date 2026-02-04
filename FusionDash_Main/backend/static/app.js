@@ -1,419 +1,144 @@
-// --- STATE MANAGEMENT ---
-let allServices = [];
-let boards = [];
-let prefs = {};
-let activeBoardId = localStorage.getItem('fusion_active_board') || 'default';
-let currentView = 'board';
-let currentEditingId = null;
-
-// Track active status for summary box
-let statusTracker = {};
-
-// --- DOM CACHE ---
-const dom = {
-    layout: document.getElementById('main-layout'),
-    sidebar: document.getElementById('sidebar'),
-    sidebarToggle: document.getElementById('sidebar-toggle'),
-    brandText: document.getElementById('brand-text'),
-    brandLogo: document.getElementById('brand-logo'),
-    
-    boardList: document.getElementById('board-list'),
-    boardView: document.getElementById('board-view'),
-    libraryView: document.getElementById('library-view'),
-    statusBar: document.getElementById('status-bar'), // New
-    pageTitle: document.getElementById('page-title'),
-    addBtnText: document.getElementById('add-btn-text'),
-    
-    wallpaperLayer: document.getElementById('wallpaper-layer'),
-    wallpaperOverlay: document.getElementById('wallpaper-overlay'),
-    
-    // Modals & Overlays
-    boardModal: document.getElementById('board-modal'),
-    pickerModal: document.getElementById('app-picker-modal'),
-    globalModal: document.getElementById('global-settings-modal'),
-    editorSide: document.getElementById('editor-side'),
-    overlay: document.getElementById('overlay'),
-    
-    // Inputs (Board)
-    bInputs: {
-        name: document.getElementById('b-name'),
-        wallpaper: document.getElementById('b-wallpaper'),
-        blur: document.getElementById('b-blur'),
-        opacity: document.getElementById('b-opacity'),
-        fit: document.getElementById('b-fit'),
-        cardSize: document.getElementById('b-cardsize'),
-        align: document.getElementById('b-align'),
-        style: document.getElementById('b-style')
-    },
-    // Inputs (Service)
-    sInputs: {
-        name: document.getElementById('e-name'),
-        group: document.getElementById('e-group'),
-        href: document.getElementById('e-href'),
-        icon: document.getElementById('e-icon'),
-        widget: document.getElementById('e-widget'),
-        apikey: document.getElementById('e-apikey')
-    },
-    // Inputs (Global)
-    gInputs: {
-        appname: document.getElementById('g-appname'),
-        logo: document.getElementById('g-logo'),
-        accent: document.getElementById('g-accent'),
-        sideOpacity: document.getElementById('g-side-opacity'),
-        autoCollapse: document.getElementById('g-autocollapse')
-    }
+// --- STATE ---
+let State = {
+    services: [],
+    boards: [],
+    prefs: {},
+    activeBoardId: 'default',
+    currentView: 'board', 
+    statusTracker: {},
+    editingSectionId: null,
+    editingServiceId: null
 };
 
 // --- INIT ---
 async function init() {
-    loadLocalState();
-    applyPreferences();
-    renderSidebar();
+    loadLocalData();
+    applyTheme(State.prefs);
+    
+    // Auto Collapse Sidebar Check
+    if(window.innerWidth > 768 && State.prefs.autoCollapse) {
+        document.getElementById('sidebar').classList.add('collapsed');
+    }
+
+    Render.renderSidebar(State.boards, State.activeBoardId);
+    setupEventListeners();
 
     try {
         const res = await fetch("/api/init");
         if(res.ok) {
             const data = await res.json();
-            allServices = data.services || [];
-            allServices.sort((a, b) => (a.order || 100) - (b.order || 100));
+            State.services = data.services || [];
+            State.services.sort((a, b) => (a.order || 100) - (b.order || 100));
+            updateCounts();
             
-            updateLibraryStats();
-            renderStatusSummary(); // Init summary box
-            
-            if(currentView === 'board') switchBoard(activeBoardId);
+            // ROUTING: Check URL for board ID
+            const params = new URLSearchParams(window.location.search);
+            const urlBoard = params.get('board');
+            if(urlBoard && State.boards.find(b => b.id === urlBoard)) {
+                State.activeBoardId = urlBoard;
+            } else {
+                // Fallback to localstorage or default
+                const savedId = localStorage.getItem('fusion_active_board');
+                if(savedId && State.boards.find(b => b.id === savedId)) State.activeBoardId = savedId;
+            }
+
+            if (State.currentView === 'board') window.switchBoard(State.activeBoardId);
             else renderLibrary();
+
+            startPings();
         }
-    } catch(e) { console.error("Backend fetch failed", e); }
+    } catch(e) { console.error("Init failed", e); }
 }
 
-function loadLocalState() {
+function loadLocalData() {
     const savedBoards = localStorage.getItem('fusion_boards');
-    if(savedBoards) {
-        boards = JSON.parse(savedBoards);
-        boards.forEach(b => { if(!b.items) b.items = []; });
+    if (savedBoards) {
+        State.boards = JSON.parse(savedBoards);
+        // Migration
+        State.boards.forEach(b => {
+            if (!b.sections) {
+                b.sections = [];
+                if (b.items && b.items.length > 0) b.sections.push({ id: 'sec_def', title: 'Main', items: b.items });
+                delete b.items;
+            }
+        });
     } else {
-        boards = [{
-            id: 'default',
-            name: 'Home',
-            settings: { wallpaper: '', blur: 0, opacity: 0.5, fit: 'cover', cardSize: 'medium', style: 'standard' },
-            items: [] 
+        State.boards = [{ 
+            id: 'default', name: 'Home', 
+            sections: [{ id: 's1', title: 'General', items: [] }],
+            settings: { cardSize: 'medium', style: 'standard' } 
         }];
     }
-
     const savedPrefs = localStorage.getItem('fusion_prefs');
-    if(savedPrefs) {
-        prefs = JSON.parse(savedPrefs);
-    } else {
-        prefs = { appName: 'FusionDash', logo: 'ph-hexagon', accent: '#007cff', sideOpacity: 0.85, autoCollapse: false };
-    }
+    State.prefs = savedPrefs ? JSON.parse(savedPrefs) : { accent: '#007cff', autoCollapse: false };
 }
 
-// --- PREFERENCES ---
-function applyPreferences() {
-    dom.brandText.innerText = prefs.appName || 'FusionDash';
+// --- GLOBAL ACTIONS ---
+
+window.switchBoard = (id) => {
+    const board = State.boards.find(b => b.id === id);
+    if (!board) return;
+
+    State.activeBoardId = id;
+    State.currentView = 'board';
+    localStorage.setItem('fusion_active_board', id);
+
+    // Update URL without reloading
+    const newUrl = new URL(window.location);
+    newUrl.searchParams.set('board', id);
+    window.history.pushState({}, '', newUrl);
+
+    document.getElementById('board-view').classList.remove('hidden');
+    document.getElementById('library-view').classList.add('hidden');
+    document.getElementById('header-add-section-btn').classList.remove('hidden');
     
-    if(prefs.logo && (prefs.logo.includes('/') || prefs.logo.includes('.'))) {
-        dom.brandLogo.className = '';
-        dom.brandLogo.innerHTML = `<img src="${prefs.logo}" style="width:24px; height:24px; object-fit:contain;">`;
-    } else {
-        dom.brandLogo.innerHTML = '';
-        dom.brandLogo.className = `ph-fill ${prefs.logo || 'ph-hexagon'}`;
-    }
-
-    const root = document.documentElement;
-    root.style.setProperty('--accent', prefs.accent || '#007cff');
-    root.style.setProperty('--glass', `rgba(18, 18, 24, ${prefs.sideOpacity || 0.85})`);
-
-    // Only auto-collapse on desktop
-    if(window.innerWidth > 768 && prefs.autoCollapse && !dom.sidebar.classList.contains('collapsed')) {
-        dom.sidebar.classList.add('collapsed');
-    }
-}
-
-function savePreferences() {
-    localStorage.setItem('fusion_prefs', JSON.stringify(prefs));
-    applyPreferences();
-}
-
-// --- VIEW LOGIC ---
-window.switchBoard = function(boardId) {
-    const board = boards.find(b => b.id === boardId);
-    if(!board) return switchBoard(boards[0].id);
-
-    activeBoardId = board.id;
-    currentView = 'board';
-    localStorage.setItem('fusion_active_board', activeBoardId);
-
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-    const btn = document.querySelector(`.board-btn[data-id="${boardId}"]`);
-    if(btn) btn.classList.add('active');
-
-    dom.boardView.classList.remove('hidden');
-    dom.libraryView.classList.add('hidden');
-    dom.pageTitle.innerText = board.name;
-    dom.addBtnText.innerText = "Add App";
-
-    applyBoardSettings(board.settings);
-    renderBoard();
+    document.getElementById('page-title').innerText = board.name;
+    
+    // Pass current search term to render
+    const searchTerm = document.getElementById('search').value.toLowerCase();
+    
+    Render.renderSidebar(State.boards, id);
+    applyBoardTheme(board.settings);
+    Render.renderBoard(board, State.services, board.settings, searchTerm);
+    
+    // IMMEDIATELY restore status colors
+    reapplyStatus();
 };
 
-function applyBoardSettings(s) {
-    if(!s) return;
-    dom.wallpaperLayer.style.backgroundImage = s.wallpaper ? `url('${s.wallpaper}')` : 'none';
-    dom.wallpaperLayer.style.backgroundSize = s.fit || 'cover';
-    dom.wallpaperLayer.style.filter = `blur(${s.blur || 0}px)`;
-    dom.wallpaperOverlay.style.opacity = s.opacity || 0.5;
-}
-
-// --- RENDERERS ---
-function renderSidebar() {
-    dom.boardList.innerHTML = '';
-    boards.forEach(b => {
-        const btn = document.createElement('button');
-        btn.className = `nav-item board-btn ${b.id === activeBoardId && currentView === 'board' ? 'active' : ''}`;
-        btn.dataset.id = b.id;
-        btn.innerHTML = `<i class="ph ph-layout"></i> <span>${b.name}</span>`;
-        btn.onclick = () => switchBoard(b.id);
-        dom.boardList.appendChild(btn);
-    });
-}
-
-function renderStatusSummary() {
-    // Categorize services
-    const summary = {};
-    
-    allServices.forEach(s => {
-        // Use source (docker/manual) or create "Web" if manual
-        let type = s.source === 'docker' ? 'Docker' : 'Web/Apps';
-        if (!summary[type]) summary[type] = { total: 0, online: 0, offline: 0 };
-        
-        summary[type].total++;
-        
-        // Check current tracker state
-        const state = statusTracker[s.id];
-        if (state === 'online') summary[type].online++;
-        else if (state === 'offline') summary[type].offline++;
-    });
-
-    dom.statusBar.innerHTML = '';
-    
-    Object.keys(summary).forEach(type => {
-        const data = summary[type];
-        const icon = type === 'Docker' ? 'ph-docker-logo' : 'ph-globe';
-        
-        const html = `
-            <div class="status-pill">
-                <i class="ph ${icon}"></i>
-                <span>${type}</span>
-                <div class="status-counts">
-                    <span title="Online" class="count-online">● ${data.online}</span>
-                    <span title="Offline" class="count-offline">● ${data.offline}</span>
-                    <span title="Total" style="color:#666">/ ${data.total}</span>
-                </div>
-            </div>
-        `;
-        dom.statusBar.innerHTML += html;
-    });
-}
-
-function renderBoard() {
-    dom.boardView.innerHTML = '';
-    const board = boards.find(b => b.id === activeBoardId);
-    
-    if(!document.getElementById('mobile-overlay')) {
-        const mo = document.createElement('div');
-        mo.id = 'mobile-overlay';
-        mo.onclick = () => {
-            dom.sidebar.classList.remove('mobile-open');
-            mo.classList.remove('active');
-        };
-        document.body.appendChild(mo);
-    }
-
-    dom.boardView.className = 'view-container'; 
-    if(board.settings.style) dom.boardView.classList.add(`style-${board.settings.style}`);
-    if(board.settings.align === 'center') dom.boardView.classList.add('align-center');
-
-    const term = document.getElementById("search").value.toLowerCase();
-    let visible = [];
-    if (board.items && board.items.length > 0) {
-        visible = board.items
-            .map(id => allServices.find(s => s.id === id))
-            .filter(s => s !== undefined);
-    }
-    if(term) visible = visible.filter(s => s.name.toLowerCase().includes(term));
-
-    const groups = [...new Set(visible.map(s => s.group || "General"))].sort();
-
-    groups.forEach(groupName => {
-        const section = document.createElement('div');
-        section.className = 'board-section';
-        const gridClass = `grid-${board.settings.cardSize || 'medium'}`;
-        
-        section.innerHTML = `
-            <div class="section-header"><h4 class="section-title">${groupName}</h4></div>
-            <div class="section-grid ${gridClass}"></div>
-        `;
-        
-        const grid = section.querySelector('.section-grid');
-        new Sortable(grid, { group: 'shared', animation: 150 });
-
-        visible.filter(s => (s.group || "General") === groupName).forEach(s => {
-            grid.appendChild(createCard(s));
-        });
-        dom.boardView.appendChild(section);
-    });
-
-    if(visible.length === 0 && !term) {
-        dom.boardView.innerHTML = `
-            <div style="text-align:center; padding-top:100px; color:#666;">
-                <i class="ph ph-squares-four" style="font-size:48px; margin-bottom:10px;"></i>
-                <p>Board is empty</p>
-                <button onclick="openAppPicker()" class="btn btn-primary" style="margin-top:10px; width:auto;">
-                    Add App from Library
-                </button>
-            </div>
-        `;
-    }
-}
-
-function renderLibrary() {
-    dom.libraryView.classList.remove('hidden');
-    dom.boardView.classList.add('hidden');
-    dom.pageTitle.innerText = "App Library";
-    dom.addBtnText.innerText = "New Service";
-    dom.wallpaperLayer.style.filter = "blur(10px)";
-
-    const grid = document.getElementById("library-grid");
-    grid.innerHTML = '';
-    const term = document.getElementById("search").value.toLowerCase();
-
-    allServices.forEach(s => {
-        if(term && !s.name.toLowerCase().includes(term)) return;
-        grid.appendChild(createCard(s, true));
-    });
-}
-
-function createCard(service, isCompact = false) {
-    const card = document.createElement('div');
-    card.className = "card";
-    
-    let iconHTML = `<i class="ph ph-cube" style="font-size:32px;"></i>`;
-    if(service.icon) {
-        iconHTML = `<img src="${service.icon}" onerror="this.style.display='none'">`;
-        if(!service.icon.includes('/') && !service.icon.includes('.')) {
-             const url = `https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${service.icon.toLowerCase()}.png`;
-             iconHTML = `<img src="${url}" onerror="this.src='https://unpkg.com/@phosphor-icons/core/assets/duotone/cube-duotone.svg'">`;
-        }
-    }
-
-    const widgetHtml = `<div id="widget-${service.id}" class="widget-data"></div>`;
-
-    card.innerHTML = `
-        <div class="status-dot js-status-${service.id}"></div>
-        ${iconHTML}
-        <div class="card-name">${service.name}</div>
-        ${widgetHtml}
-        <div class="edit-trigger" onclick="window.editService('${service.id}', event)">
-            <i class="ph-bold ph-dots-three-vertical"></i>
-        </div>
-    `;
-
-    card.onclick = (e) => {
-        if(e.target.closest('.edit-trigger')) return;
-        if(service.href) window.open(service.href, '_blank');
-    };
-
-    setTimeout(() => {
-        checkStatus(service.id, service.href, service.state);
-        if(service.widgetType && service.apiKey) {
-            fetchWidgetData(service);
-        }
-    }, 100);
-
-    return card;
-}
-
-// --- WIDGETS ---
-async function fetchWidgetData(service) {
-    const el = document.getElementById(`widget-${service.id}`);
-    if(!el) return;
-
-    if(service.widgetType === 'arr_queue') {
-        try {
-            const res = await fetch(`/api/integration/arr/queue?url=${encodeURIComponent(service.href)}&api_key=${service.apiKey}`);
-            const data = await res.json();
-            
-            if(data.count > 0) {
-                el.innerText = `${data.count} Active`;
-                el.style.color = "#4facfe";
-            } else {
-                el.innerText = "Idle";
-                el.style.color = "#888";
-            }
-            el.classList.add('active');
-        } catch(e) {
-            console.log("Widget Error", e);
-        }
-    }
-}
-
-// --- APP PICKER ---
-window.openAppPicker = function() {
-    const board = boards.find(b => b.id === activeBoardId);
-    const pickerList = document.getElementById('picker-list');
-    pickerList.innerHTML = '';
-    const available = allServices.filter(s => !board.items.includes(s.id));
-    
-    available.forEach(s => {
-        const item = document.createElement('div');
-        item.className = 'picker-item';
-        let iconSrc = s.icon;
-        if(s.icon && !s.icon.includes('/') && !s.icon.includes('.')) {
-            iconSrc = `https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${s.icon.toLowerCase()}.png`;
-        }
-        item.innerHTML = `<img src="${iconSrc}" onerror="this.style.display='none'"><span>${s.name}</span>`;
-        item.onclick = () => {
-            board.items.push(s.id);
-            saveBoards();
-            renderBoard();
-            closeModals();
-        };
-        pickerList.appendChild(item);
-    });
-    
-    if(available.length === 0) {
-        pickerList.innerHTML = '<div style="grid-column:1/-1; color:#666; text-align:center;">All apps are already on this board.</div>';
-    }
-    dom.overlay.classList.add('active');
-    dom.pickerModal.classList.add('active');
+window.addSection = () => {
+    const board = State.boards.find(b => b.id === State.activeBoardId);
+    const newSec = { id: `sec_${Date.now()}`, title: "New Section", items: [] };
+    board.sections.push(newSec);
+    saveBoards();
+    window.switchBoard(State.activeBoardId);
 };
-document.getElementById('btn-create-new').onclick = () => { closeModals(); openEditor(null); };
 
-// --- EDITOR LOGIC ---
-window.editService = function(id, e) {
+window.editSection = (id) => {
+    State.editingSectionId = id;
+    const board = State.boards.find(b => b.id === State.activeBoardId);
+    const sec = board.sections.find(s => s.id === id);
+    if(!sec) return;
+    document.getElementById('sec-title').value = sec.title;
+    openModal('section-modal');
+};
+
+window.editService = (id, e) => {
     if(e) e.stopPropagation();
-    
-    const service = allServices.find(s => s.id === id);
-    if(!service) { console.error("Service not found"); return; }
+    State.editingServiceId = id;
+    const service = State.services.find(s => s.id === id);
+    if(!service) return;
 
-    currentEditingId = id;
-    
-    // Reset Fields
-    dom.sInputs.name.value = "";
-    dom.sInputs.href.value = "";
-    dom.sInputs.apikey.value = "";
-
-    // Populate
-    dom.sInputs.name.value = service.name;
-    dom.sInputs.group.value = service.group || "General";
-    dom.sInputs.href.value = service.href;
-    dom.sInputs.icon.value = service.icon || "";
-    dom.sInputs.widget.value = service.widgetType || "";
-    dom.sInputs.apikey.value = service.apiKey || "";
+    document.getElementById('e-name').value = service.name;
+    document.getElementById('e-source').value = service.displaySource || service.source || 'docker'; // Load Source
+    document.getElementById('e-group').value = service.group || "General";
+    document.getElementById('e-href').value = service.href;
+    document.getElementById('e-icon').value = service.icon || "";
+    document.getElementById('e-widget').value = service.widgetType || "";
+    document.getElementById('e-apikey').value = service.apiKey || "";
 
     const delBtn = document.getElementById('delete-service-btn');
-    if(currentView === 'board') {
+    if(State.currentView === 'board') {
         delBtn.innerText = "Remove from Board";
         delBtn.className = 'btn btn-secondary';
     } else {
@@ -421,162 +146,368 @@ window.editService = function(id, e) {
         delBtn.className = 'btn btn-danger';
     }
 
-    dom.overlay.classList.add('active');
-    dom.editorSide.classList.add('active');
+    document.getElementById('overlay').classList.add('active');
+    document.getElementById('editor-side').classList.add('active');
 };
 
-document.getElementById('save-service-btn').onclick = async () => {
-    const payload = {
-        name: dom.sInputs.name.value,
-        group: dom.sInputs.group.value,
-        href: dom.sInputs.href.value,
-        icon: dom.sInputs.icon.value,
-        widgetType: dom.sInputs.widget.value,
-        apiKey: dom.sInputs.apikey.value,
-        pinned: true
-    };
+window.handleDragEnd = (evt) => {
+    const board = State.boards.find(b => b.id === State.activeBoardId);
+    const sectionDivs = document.querySelectorAll('.board-section');
+    board.sections.forEach(sec => {
+        const domSec = [...sectionDivs].find(d => d.dataset.id === sec.id);
+        if (domSec) {
+            const grid = domSec.querySelector('.section-grid');
+            const newItems = [...grid.children].map(c => c.dataset.id);
+            sec.items = newItems;
+        }
+    });
+    saveBoards();
+};
+
+let currentPickerSectionId = null;
+
+window.openAppPicker = (sectionId) => {
+    currentPickerSectionId = sectionId;
+    const board = State.boards.find(b => b.id === State.activeBoardId);
+    const section = board.sections.find(s => s.id === sectionId);
     
-    const url = currentEditingId ? `/api/services/${currentEditingId}/update` : `/api/services/add_manual`;
-    await fetch(url, { method: "POST", body: JSON.stringify(payload), headers: {'Content-Type': 'application/json'} });
-    closeModals();
-    init();
-};
+    const onBoardIds = board.sections.flatMap(s => s.items);
+    const available = State.services.filter(s => !onBoardIds.includes(s.id));
 
-document.getElementById('delete-service-btn').onclick = async () => {
-    if(!currentEditingId) return;
-    
-    if(currentView === 'board') {
-        const board = boards.find(b => b.id === activeBoardId);
-        board.items = board.items.filter(id => id !== currentEditingId);
-        saveBoards();
-        renderBoard();
-        closeModals();
-    } else {
-        if(!confirm("Permanently uninstall?")) return;
-        boards.forEach(b => { if(b.items) b.items = b.items.filter(id => id !== currentEditingId); });
-        saveBoards();
-        await fetch(`/api/services/${currentEditingId}/hide`, { method: "POST" });
-        closeModals();
-        init();
-    }
-};
+    const list = document.getElementById('picker-list');
+    list.innerHTML = '';
+    document.getElementById('picker-target-msg').innerText = `Adding to: ${section.title}`;
 
-function saveBoards() { localStorage.setItem('fusion_boards', JSON.stringify(boards)); }
-
-// --- GLOBAL SETTINGS ---
-document.getElementById('nav-settings').onclick = () => {
-    dom.gInputs.appname.value = prefs.appName || '';
-    dom.gInputs.logo.value = prefs.logo || '';
-    dom.gInputs.accent.value = prefs.accent || '#007cff';
-    dom.gInputs.sideOpacity.value = prefs.sideOpacity || 0.85;
-    dom.gInputs.autoCollapse.checked = prefs.autoCollapse || false;
-    dom.overlay.classList.add('active');
-    dom.globalModal.classList.add('active');
-};
-document.getElementById('save-global-btn').onclick = () => {
-    prefs.appName = dom.gInputs.appname.value;
-    prefs.logo = dom.gInputs.logo.value;
-    prefs.accent = dom.gInputs.accent.value;
-    prefs.sideOpacity = dom.gInputs.sideOpacity.value;
-    prefs.autoCollapse = dom.gInputs.autoCollapse.checked;
-    savePreferences(); closeModals();
-};
-document.getElementById('btn-hard-reset').onclick = () => {
-    if(confirm("Reset everything?")) { localStorage.clear(); location.reload(); }
-};
-
-// --- EVENT LISTENERS ---
-document.getElementById('sidebar-toggle').onclick = () => {
-    if(window.innerWidth <= 768) {
-        dom.sidebar.classList.toggle('mobile-open');
-        const mo = document.getElementById('mobile-overlay');
-        if(mo) mo.classList.toggle('active');
-    } else {
-        dom.sidebar.classList.toggle('collapsed');
-    }
-};
-
-document.getElementById('add-service-btn').onclick = () => {
-    if(currentView === 'board') openAppPicker(); else { openEditor(null); }
-};
-document.getElementById('nav-library').onclick = () => {
-    currentView = 'library'; renderLibrary();
-    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-    document.getElementById('nav-library').classList.add('active');
-};
-function closeModals() {
-    document.querySelectorAll('.modal, #editor-side, #overlay').forEach(el => el.classList.remove('active', 'open', 'visible'));
-}
-dom.overlay.onclick = closeModals;
-document.querySelectorAll('.close-modal').forEach(b => b.onclick = closeModals);
-document.getElementById('close-editor').onclick = closeModals;
-
-document.getElementById('board-settings-btn').onclick = () => {
-    const board = boards.find(b => b.id === activeBoardId);
-    dom.bInputs.name.value = board.name;
-    const s = board.settings;
-    dom.bInputs.wallpaper.value = s.wallpaper;
-    dom.bInputs.align.value = s.align;
-    dom.bInputs.cardSize.value = s.cardSize;
-    dom.bInputs.style.value = s.style || 'standard';
-    dom.bInputs.blur.value = s.blur;
-    dom.bInputs.opacity.value = s.opacity;
-    dom.bInputs.fit.value = s.fit;
-    dom.overlay.classList.add('active');
-    dom.boardModal.classList.add('active');
-};
-document.getElementById('save-board-btn').onclick = () => {
-    const board = boards.find(b => b.id === activeBoardId);
-    board.name = dom.bInputs.name.value;
-    board.settings.wallpaper = dom.bInputs.wallpaper.value;
-    board.settings.align = dom.bInputs.align.value;
-    board.settings.cardSize = dom.bInputs.cardSize.value;
-    board.settings.style = dom.bInputs.style.value;
-    board.settings.blur = dom.bInputs.blur.value;
-    board.settings.opacity = dom.bInputs.opacity.value;
-    board.settings.fit = dom.bInputs.fit.value;
-    saveBoards(); switchBoard(activeBoardId); closeModals();
-};
-document.getElementById('create-board-btn').onclick = () => {
-    const newId = 'b_' + Date.now();
-    boards.push({ id: newId, name: 'New Board', settings: { cardSize: 'medium' }, items: [] });
-    saveBoards(); renderSidebar(); switchBoard(newId);
-};
-document.getElementById('delete-board-btn').onclick = () => {
-    if(boards.length <= 1) return alert("Cannot delete only board");
-    if(!confirm("Delete board?")) return;
-    boards = boards.filter(b => b.id !== activeBoardId);
-    saveBoards(); switchBoard(boards[0].id); renderSidebar(); closeModals();
-};
-document.getElementById('search').oninput = () => { if(currentView === 'board') renderBoard(); else renderLibrary(); };
-
-async function checkStatus(id, url, dockerState) {
-    const dots = document.querySelectorAll(`.js-status-${id}`);
-    if(dots.length === 0) return;
-    
-    let isOnline = false;
-
-    // Fast check: If Docker says it's not running, it's offline.
-    if(dockerState && dockerState !== 'running') {
-        isOnline = false;
-    } else if(url) {
-        try {
-            const res = await fetch(`/api/status/ping?url=${encodeURIComponent(url)}`);
-            const data = await res.json();
-            isOnline = (data.status === 'online');
-        } catch(e) {}
-    }
-
-    dots.forEach(d => { 
-        d.className = `status-dot js-status-${id} ${isOnline ? 'online' : 'offline'}`; 
+    available.forEach(s => {
+        const item = document.createElement('div');
+        item.className = 'picker-item';
+        item.innerHTML = `${Render.getIcon(s)}<span>${s.name}</span>`;
+        item.onclick = () => {
+            section.items.push(s.id);
+            saveBoards();
+            window.switchBoard(State.activeBoardId);
+            closeModals();
+        };
+        list.appendChild(item);
     });
 
-    // Update global tracker
-    statusTracker[id] = isOnline ? 'online' : 'offline';
+    const btnWidget = document.getElementById('btn-add-status-widget');
+    if (onBoardIds.includes('builtin_status_summary')) {
+        btnWidget.classList.add('hidden');
+    } else {
+        btnWidget.classList.remove('hidden');
+        btnWidget.onclick = () => {
+            section.items.unshift('builtin_status_summary');
+            saveBoards();
+            window.switchBoard(State.activeBoardId);
+            closeModals();
+        };
+    }
+    openModal('app-picker-modal');
+};
+
+window.removeWidget = (id) => {
+    if(!confirm("Remove widget?")) return;
+    const board = State.boards.find(b => b.id === State.activeBoardId);
+    board.sections.forEach(s => { s.items = s.items.filter(i => i !== id); });
+    saveBoards();
+    window.switchBoard(State.activeBoardId);
+};
+
+// --- LISTENERS ---
+function setupEventListeners() {
+    document.getElementById('sidebar-toggle').onclick = () => {
+        const sb = document.getElementById('sidebar');
+        if(window.innerWidth <= 768) sb.classList.toggle('mobile-open');
+        else sb.classList.toggle('collapsed');
+    };
+
+    document.getElementById('create-board-btn').onclick = () => {
+        const newId = 'b_' + Date.now();
+        State.boards.push({ 
+            id: newId, name: 'New Board', 
+            sections: [{id: 's1', title: 'Main', items: []}], 
+            settings: { cardSize: 'medium' } 
+        });
+        saveBoards();
+        Render.renderSidebar(State.boards, State.activeBoardId);
+        window.switchBoard(newId);
+    };
+
+    document.getElementById('nav-library').onclick = () => {
+        State.currentView = 'library';
+        renderLibrary();
+        document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+        document.getElementById('nav-library').classList.add('active');
+    };
+
+    document.getElementById('nav-settings').onclick = () => {
+        document.getElementById('g-appname').value = State.prefs.appName || 'FusionDash';
+        document.getElementById('g-logo').value = State.prefs.logo || '';
+        document.getElementById('g-accent').value = State.prefs.accent || '#007cff';
+        document.getElementById('g-side-opacity').value = State.prefs.sideOpacity || 0.85;
+        document.getElementById('g-autocollapse').checked = State.prefs.autoCollapse || false; // Set checked state
+        openModal('global-settings-modal');
+    };
+
+    document.getElementById('header-add-section-btn').onclick = window.addSection;
     
-    // Refresh summary box
-    renderStatusSummary();
+    document.getElementById('board-settings-btn').onclick = () => {
+        const board = State.boards.find(b => b.id === State.activeBoardId);
+        document.getElementById('b-name').value = board.name;
+        document.getElementById('b-wallpaper').value = board.settings.wallpaper || '';
+        document.getElementById('b-blur').value = board.settings.blur || 0;
+        document.getElementById('b-opacity').value = board.settings.opacity || 0.5;
+        document.getElementById('b-style').value = board.settings.style || 'standard';
+        document.getElementById('b-cardsize').value = board.settings.cardSize || 'medium';
+        document.getElementById('b-align').value = board.settings.align || 'left';
+        document.getElementById('b-fit').value = board.settings.fit || 'cover';
+        openModal('board-modal');
+    };
+
+    // SEARCH LISTENER FIX
+    document.getElementById('search').oninput = () => {
+        if(State.currentView === 'board') window.switchBoard(State.activeBoardId);
+        else renderLibrary();
+    };
+
+    document.getElementById('overlay').onclick = closeModals;
+    document.querySelectorAll('.close-modal').forEach(b => b.onclick = closeModals);
+    document.getElementById('close-editor').onclick = closeModals;
+
+    document.getElementById('save-board-btn').onclick = () => {
+        const board = State.boards.find(b => b.id === State.activeBoardId);
+        board.name = document.getElementById('b-name').value;
+        board.settings.wallpaper = document.getElementById('b-wallpaper').value;
+        board.settings.blur = document.getElementById('b-blur').value;
+        board.settings.opacity = document.getElementById('b-opacity').value;
+        board.settings.style = document.getElementById('b-style').value;
+        board.settings.cardSize = document.getElementById('b-cardsize').value;
+        board.settings.align = document.getElementById('b-align').value;
+        board.settings.fit = document.getElementById('b-fit').value;
+        saveBoards();
+        window.switchBoard(State.activeBoardId);
+        closeModals();
+    };
+    
+    document.getElementById('delete-board-btn').onclick = () => {
+        if(State.boards.length <= 1) return alert("Cannot delete last board");
+        if(!confirm("Delete this board?")) return;
+        State.boards = State.boards.filter(b => b.id !== State.activeBoardId);
+        saveBoards();
+        window.switchBoard(State.boards[0].id);
+        closeModals();
+    };
+
+    document.getElementById('save-section-btn').onclick = () => {
+        const board = State.boards.find(b => b.id === State.activeBoardId);
+        const sec = board.sections.find(s => s.id === State.editingSectionId);
+        if(sec) {
+            sec.title = document.getElementById('sec-title').value;
+            saveBoards();
+            window.switchBoard(State.activeBoardId);
+        }
+        closeModals();
+    };
+
+    document.getElementById('delete-section-btn').onclick = () => {
+        if(!confirm("Delete section?")) return;
+        const board = State.boards.find(b => b.id === State.activeBoardId);
+        board.sections = board.sections.filter(s => s.id !== State.editingSectionId);
+        saveBoards();
+        window.switchBoard(State.activeBoardId);
+        closeModals();
+    };
+
+    document.getElementById('save-global-btn').onclick = () => {
+        State.prefs.appName = document.getElementById('g-appname').value;
+        State.prefs.logo = document.getElementById('g-logo').value;
+        State.prefs.accent = document.getElementById('g-accent').value;
+        State.prefs.sideOpacity = document.getElementById('g-side-opacity').value;
+        State.prefs.autoCollapse = document.getElementById('g-autocollapse').checked;
+        localStorage.setItem('fusion_prefs', JSON.stringify(State.prefs));
+        applyTheme(State.prefs);
+        closeModals();
+        location.reload(); 
+    };
+    
+    document.getElementById('btn-hard-reset').onclick = () => {
+        if(confirm("Factory Reset?")) { localStorage.clear(); location.reload(); }
+    };
+
+    document.getElementById('btn-create-new').onclick = () => {
+        closeModals();
+        State.editingServiceId = null;
+        document.getElementById('e-name').value = "";
+        document.getElementById('e-source').value = "web"; // Default
+        document.getElementById('e-group').value = "";
+        document.getElementById('e-href').value = "";
+        document.getElementById('e-icon').value = "";
+        document.getElementById('e-widget').value = "";
+        document.getElementById('e-apikey').value = "";
+        document.getElementById('overlay').classList.add('active');
+        document.getElementById('editor-side').classList.add('active');
+    };
+
+    document.getElementById('save-service-btn').onclick = async () => {
+        const payload = {
+            name: document.getElementById('e-name').value,
+            displaySource: document.getElementById('e-source').value, // SAVE SOURCE
+            group: document.getElementById('e-group').value,
+            href: document.getElementById('e-href').value,
+            icon: document.getElementById('e-icon').value,
+            widgetType: document.getElementById('e-widget').value,
+            apiKey: document.getElementById('e-apikey').value
+        };
+        
+        const url = State.editingServiceId 
+            ? `/api/services/${State.editingServiceId}/update` 
+            : `/api/services/add_manual`;
+            
+        await fetch(url, { method: "POST", body: JSON.stringify(payload), headers: {'Content-Type': 'application/json'} });
+        
+        if (!State.editingServiceId && currentPickerSectionId) {
+             // If this was a new add, force reload to get ID then manual push logic (simplified: full reload)
+             location.reload(); 
+        } else {
+            closeModals();
+            init();
+        }
+    };
+
+    document.getElementById('delete-service-btn').onclick = async () => {
+        if(State.currentView === 'board') {
+            const board = State.boards.find(b => b.id === State.activeBoardId);
+            board.sections.forEach(s => { s.items = s.items.filter(id => id !== State.editingServiceId); });
+            saveBoards();
+            window.switchBoard(State.activeBoardId);
+        } else {
+            if(!confirm("Permanently uninstall?")) return;
+            State.boards.forEach(b => {
+                b.sections.forEach(s => { s.items = s.items.filter(id => id !== State.editingServiceId); });
+            });
+            saveBoards();
+            await fetch(`/api/services/${State.editingServiceId}/hide`, { method: "POST" });
+            init();
+        }
+        closeModals();
+    };
 }
-function updateLibraryStats() { const el = document.getElementById('total-count'); if(el) el.innerText = allServices.length; }
+
+// --- LOGIC ---
+
+function renderLibrary() {
+    document.getElementById('library-view').classList.remove('hidden');
+    document.getElementById('board-view').classList.add('hidden');
+    document.getElementById('page-title').innerText = "App Library";
+    document.getElementById('header-add-section-btn').classList.add('hidden');
+
+    const grid = document.getElementById("library-grid");
+    grid.innerHTML = '';
+    const term = document.getElementById("search").value.toLowerCase();
+
+    State.services.forEach(s => {
+        if(term && !s.name.toLowerCase().includes(term)) return;
+        const card = Render.createCard(s);
+        card.draggable = false;
+        grid.appendChild(card);
+    });
+    
+    // Also reapply status in library view
+    reapplyStatus();
+}
+
+async function startPings() {
+    for (const service of State.services) {
+        checkServiceStatus(service);
+        setInterval(() => checkServiceStatus(service), 60000); 
+    }
+}
+
+async function checkServiceStatus(service) {
+    if (service.source === 'docker' && service.state !== 'running') {
+        updateStatusUI(service.id, false);
+        return;
+    }
+    if (service.href) {
+        try {
+            const res = await fetch(`/api/status/ping?url=${encodeURIComponent(service.href)}`);
+            const data = await res.json();
+            updateStatusUI(service.id, data.status === 'online');
+            if(data.status === 'online' && service.widgetType) fetchApiData(service);
+        } catch { updateStatusUI(service.id, false); }
+    }
+}
+
+function updateStatusUI(id, isOnline) {
+    State.statusTracker[id] = isOnline ? 'online' : 'offline';
+    // Update live DOM elements
+    document.querySelectorAll(`.js-status-${id}`).forEach(el => {
+        el.className = `status-dot js-status-${id} ${isOnline ? 'online' : 'offline'}`;
+    });
+    updateWidgetUI();
+}
+
+// NEW: Function to re-paint status colors on view change
+function reapplyStatus() {
+    Object.keys(State.statusTracker).forEach(id => {
+        const status = State.statusTracker[id];
+        const cls = status === 'online' ? 'online' : 'offline';
+        document.querySelectorAll(`.js-status-${id}`).forEach(el => {
+            el.className = `status-dot js-status-${id} ${cls}`;
+        });
+    });
+    updateWidgetUI();
+}
+
+function updateWidgetUI() {
+    const widgetDots = document.querySelector('.status-dots-row .loading-dots');
+    if(widgetDots) {
+        const online = Object.values(State.statusTracker).filter(s => s === 'online').length;
+        widgetDots.innerText = `${online} / ${State.services.length} Services Online`;
+        widgetDots.style.color = '#fff';
+    }
+}
+
+async function fetchApiData(service) {
+    const el = document.getElementById(`widget-${service.id}`);
+    if(!el) return;
+    if(service.widgetType === 'arr_queue') {
+        try {
+            const res = await fetch(`/api/integration/arr/queue?url=${encodeURIComponent(service.href)}&api_key=${service.apiKey}`);
+            const data = await res.json();
+            const content = el.querySelector('.api-content');
+            el.classList.remove('hidden');
+            if (data.count > 0) {
+                content.innerText = `${data.count} Active Downloads`;
+                content.style.color = '#4facfe';
+            } else {
+                content.innerText = "Queue Idle";
+                content.style.color = '#666';
+            }
+        } catch(e) {}
+    }
+}
+
+function saveBoards() { localStorage.setItem('fusion_boards', JSON.stringify(State.boards)); }
+function openModal(id) { document.getElementById('overlay').classList.add('active'); document.getElementById(id).classList.add('active'); }
+function closeModals() { document.querySelectorAll('.modal, #editor-side, #overlay').forEach(el => el.classList.remove('active')); }
+function updateCounts() { const el = document.getElementById('total-count'); if(el) el.innerText = State.services.length; }
+
+function applyTheme(p) { 
+    document.documentElement.style.setProperty('--accent', p.accent || '#007cff'); 
+    document.documentElement.style.setProperty('--glass', `rgba(18,18,24,${p.sideOpacity||0.85})`);
+    if(p.appName) document.getElementById('brand-text').innerText = p.appName;
+}
+
+function applyBoardTheme(s) {
+    if(!s) return;
+    const bg = document.getElementById('wallpaper-layer');
+    bg.style.backgroundImage = s.wallpaper ? `url('${s.wallpaper}')` : 'none';
+    // FIX: Force cover if not set
+    bg.style.backgroundSize = s.fit || 'cover';
+    bg.style.filter = `blur(${s.blur||0}px)`;
+    document.getElementById('wallpaper-overlay').style.opacity = s.opacity || 0.5;
+}
 
 init();

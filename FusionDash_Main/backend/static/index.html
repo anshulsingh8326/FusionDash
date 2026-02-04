@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,7 +8,6 @@
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 </head>
-
 <body>
 
     <div id="wallpaper-layer"></div>
@@ -29,8 +27,7 @@
 
             <nav id="board-nav">
                 <div class="nav-label">BOARDS</div>
-                <div id="board-list">
-                </div>
+                <div id="board-list"></div>
                 <button class="nav-item add-btn" id="create-board-btn">
                     <i class="ph-bold ph-plus"></i>
                     <span>New Board</span>
@@ -48,7 +45,7 @@
             </nav>
 
             <div class="sidebar-footer">
-                <div class="footer-info">v1.4</div>
+                <div class="footer-info">v2.3</div>
             </div>
         </aside>
 
@@ -64,20 +61,15 @@
                 <div class="header-actions">
                     <div class="search-bar">
                         <i class="ph ph-magnifying-glass"></i>
-                        <input type="text" id="search" placeholder="Quick find...">
+                        <input type="text" id="search" placeholder="Search apps...">
                     </div>
-                    <button id="add-service-btn" class="btn-accent">
-                        <i class="ph-bold ph-plus"></i> <span id="add-btn-text">Add App</span>
+                    <button id="header-add-section-btn" class="btn-accent">
+                        <i class="ph-bold ph-rows"></i> <span>Add Section</span>
                     </button>
                 </div>
             </header>
 
-            <div id="status-bar" class="status-bar">
-            </div>
-
-            <div id="board-view" class="view-container">
-            </div>
-
+            <div id="board-view" class="view-container"></div>
             <div id="library-view" class="view-container hidden">
                 <div class="library-stats">
                     <div class="stat-card">
@@ -93,65 +85,28 @@
     <div id="overlay"></div>
 
     <div id="board-modal" class="modal">
-        <div class="modal-header">
-            <h3>Board Appearance</h3>
-            <button class="close-modal"><i class="ph ph-x"></i></button>
-        </div>
+        <div class="modal-header"><h3>Board Appearance</h3><button class="close-modal"><i class="ph ph-x"></i></button></div>
         <div class="modal-body">
-            <div class="field">
-                <label>Board Name</label>
-                <input id="b-name" type="text" placeholder="e.g. Home Lab">
-            </div>
-
+            <div class="field"><label>Board Name</label><input id="b-name" type="text"></div>
             <div class="field-group">
-                <label>Wallpaper Setup</label>
+                <label>Wallpaper</label>
                 <input id="b-wallpaper" type="text" placeholder="Image URL">
                 <div class="control-row">
-                    <div class="sub-field">
-                        <label>Blur</label>
-                        <input id="b-blur" type="range" min="0" max="20" step="1">
-                    </div>
-                    <div class="sub-field">
-                        <label>Dim</label>
-                        <input id="b-opacity" type="range" min="0" max="0.9" step="0.1">
-                    </div>
+                    <div class="sub-field"><label>Blur</label><input id="b-blur" type="range" min="0" max="20"></div>
+                    <div class="sub-field"><label>Dim</label><input id="b-opacity" type="range" min="0" max="0.9" step="0.1"></div>
                 </div>
                 <div class="sub-field" style="margin-top:10px;">
                     <label>Image Fit</label>
-                    <select id="b-fit">
-                        <option value="cover">Cover (Fill)</option>
-                        <option value="contain">Contain (Fit)</option>
-                    </select>
+                    <select id="b-fit"><option value="cover">Cover</option><option value="contain">Contain</option></select>
                 </div>
             </div>
-
             <div class="field-group">
-                <label>Layout Options</label>
+                <label>Layout</label>
                 <div class="control-row">
-                    <div class="sub-field">
-                        <label>Card Style</label> <select id="b-style">
-                            <option value="standard">Standard (Box)</option>
-                            <option value="wide">Wide (List View)</option>
-                            <option value="minimal">Minimal (Icon Only)</option>
-                            <option value="neon">Neon (Glow)</option>
-                        </select>
-                    </div>
-                    <div class="sub-field">
-                        <label>Card Size</label>
-                        <select id="b-cardsize">
-                            <option value="small">Small</option>
-                            <option value="medium">Medium</option>
-                            <option value="large">Large</option>
-                        </select>
-                    </div>
+                    <div class="sub-field"><label>Style</label> <select id="b-style"><option value="standard">Standard</option><option value="wide">Wide</option><option value="neon">Neon</option></select></div>
+                    <div class="sub-field"><label>Size</label> <select id="b-cardsize"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></div>
                 </div>
-                <div class="field" style="margin-top:10px">
-                    <label>Alignment</label>
-                    <select id="b-align">
-                        <option value="left">Left</option>
-                        <option value="center">Center</option>
-                    </select>
-                </div>
+                <div class="field" style="margin-top:10px"><label>Alignment</label><select id="b-align"><option value="left">Left</option><option value="center">Center</option></select></div>
             </div>
         </div>
         <div class="modal-footer">
@@ -160,103 +115,86 @@
         </div>
     </div>
 
-    <div id="app-picker-modal" class="modal">
-        <div class="modal-header">
-            <h3>Add App to Board</h3>
-            <button class="close-modal"><i class="ph ph-x"></i></button>
-        </div>
+    <div id="section-modal" class="modal" style="width:300px;">
+        <div class="modal-header"><h3>Edit Section</h3><button class="close-modal"><i class="ph ph-x"></i></button></div>
         <div class="modal-body">
+            <div class="field"><label>Section Title</label><input id="sec-title" type="text"></div>
+        </div>
+        <div class="modal-footer">
+            <button id="delete-section-btn" class="btn btn-danger-text">Delete</button>
+            <button id="save-section-btn" class="btn btn-primary">Save</button>
+        </div>
+    </div>
+
+    <div id="app-picker-modal" class="modal">
+        <div class="modal-header"><h3>Add to Section</h3><button class="close-modal"><i class="ph ph-x"></i></button></div>
+        <div class="modal-body">
+            <p id="picker-target-msg" style="font-size:0.8rem; color:var(--dim); margin-bottom:10px;"></p>
             <div id="picker-list" class="picker-grid"></div>
             <div class="picker-footer">
-                <p style="font-size:0.8rem; color:#666; margin-bottom:10px;">App not in Library?</p>
-                <button id="btn-create-new" class="btn btn-primary" style="width: auto;">
-                    <i class="ph-bold ph-plus"></i> Create Manual Service
+                <button id="btn-add-status-widget" class="btn btn-secondary" style="width:auto; margin-bottom:10px;">
+                    <i class="ph-bold ph-chart-bar"></i> Add Status Widget
                 </button>
+                <button id="btn-create-new" class="btn btn-primary" style="width:auto;">Create Manual Service</button>
             </div>
         </div>
     </div>
 
     <div id="global-settings-modal" class="modal">
-        <div class="modal-header">
-            <h3>System Settings</h3>
-            <button class="close-modal"><i class="ph ph-x"></i></button>
-        </div>
-        <div class="modal-body">
-
+         <div class="modal-header"><h3>System Settings</h3><button class="close-modal"><i class="ph ph-x"></i></button></div>
+         <div class="modal-body">
             <div class="field-group">
                 <label>Branding</label>
-                <div class="field">
-                    <label>Dashboard Name</label>
-                    <input id="g-appname" type="text" placeholder="FusionDash">
-                </div>
-                <div class="field">
-                    <label>Logo Icon (Phosphor name or URL)</label>
-                    <input id="g-logo" type="text" placeholder="ph-hexagon">
-                </div>
+                <div class="field"><label>Name</label><input id="g-appname" type="text"></div>
+                <div class="field"><label>Logo</label><input id="g-logo" type="text"></div>
             </div>
-
             <div class="field-group">
-                <label>Theme & Sidebar</label>
-                <div class="control-row">
-                    <div class="sub-field">
-                        <label>Accent Color</label>
-                        <input id="g-accent" type="color" style="height:40px; cursor:pointer;">
-                    </div>
-                    <div class="sub-field">
-                        <label>Sidebar Opacity</label>
-                        <input id="g-side-opacity" type="range" min="0.2" max="1" step="0.1">
-                    </div>
-                </div>
+                <label>Theme</label>
+                <div class="field"><label>Accent</label><input id="g-accent" type="color" style="height:40px;"></div>
+                <div class="field"><label>Sidebar Opacity</label><input id="g-side-opacity" type="range" min="0.2" max="1" step="0.1"></div>
                 <div class="field" style="margin-top:15px; display:flex; align-items:center; gap:10px;">
                     <input type="checkbox" id="g-autocollapse" style="width:auto;">
                     <label style="margin:0; cursor:pointer;" for="g-autocollapse">Start Sidebar Collapsed</label>
                 </div>
             </div>
-
-            <div class="field-group" style="border-color: rgba(255,68,68,0.2);">
-                <label style="color:#ff6666">Danger Zone</label>
-                <button id="btn-hard-reset" class="btn btn-danger" style="width:100%">
-                    <i class="ph-bold ph-trash"></i> Reset All Data
-                </button>
-            </div>
-        </div>
-        <div class="modal-footer">
-            <button id="save-global-btn" class="btn btn-primary">Save System Settings</button>
-        </div>
+            <button id="btn-hard-reset" class="btn btn-danger">Reset All Data</button>
+         </div>
+         <div class="modal-footer">
+            <button id="save-global-btn" class="btn btn-primary">Save Settings</button>
+         </div>
     </div>
 
     <div id="editor-side">
         <h3>Edit Service</h3>
-
         <div class="field"><label>Display Name</label><input id="e-name" type="text"></div>
-        <div class="field"><label>Group (Section)</label><input id="e-group" type="text"></div>
+        <div class="field">
+            <label>Card Type (Label)</label>
+            <select id="e-source">
+                <option value="docker">Docker</option>
+                <option value="web">Web App</option>
+                <option value="windows">Windows App</option>
+                <option value="other">Other</option>
+            </select>
+        </div>
+        <div class="field"><label>Description (Optional)</label><input id="e-desc" type="text" placeholder="Short info..."></div>
+        
+        <div class="field"><label>Tag (Category)</label><input id="e-group" type="text"></div>
         <div class="field"><label>URL</label><input id="e-href" type="text"></div>
         <div class="field"><label>Icon URL</label><input id="e-icon" type="text"></div>
-
         <div class="field-group" style="margin-top:20px;">
             <label>API Integration</label>
-            <div class="field">
-                <label>Widget Type (What data to show?)</label>
-                <select id="e-widget">
-                    <option value="">None</option>
-                    <option value="arr_queue">Arr Stack Queue (Sonarr/Radarr)</option>
-                </select>
-            </div>
-            <div class="field">
-                <label>API Key</label>
-                <input id="e-apikey" type="password" placeholder="Paste API Key here">
-            </div>
+            <div class="field"><label>Widget Type</label><select id="e-widget"><option value="">None</option><option value="arr_queue">Arr Queue</option></select></div>
+            <div class="field"><label>API Key</label><input id="e-apikey" type="password"></div>
         </div>
-
         <div class="actions-stack">
             <button id="save-service-btn" class="btn btn-primary">Save Changes</button>
-            <div style="height:1px; background:rgba(255,255,255,0.1); margin:5px 0;"></div>
             <button id="delete-service-btn" class="btn btn-secondary">Remove</button>
             <button id="close-editor" class="btn btn-text">Cancel</button>
         </div>
     </div>
 
+    <script src="widgets.js"></script>
+    <script src="render.js"></script>
     <script src="app.js"></script>
 </body>
-
 </html>

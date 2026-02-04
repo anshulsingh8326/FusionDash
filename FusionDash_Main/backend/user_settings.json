@@ -26,6 +26,15 @@
       "widgetType": "arr_queue",
       "apiKey": "e8b404681c08407fb70467c381b1894d",
       "pinned": true
+    },
+    "Sonarr": {
+      "name": "Sonarr",
+      "displaySource": "docker",
+      "group": "media",
+      "href": "http://localhost:8989",
+      "icon": "sonarr",
+      "widgetType": "",
+      "apiKey": ""
     }
   },
   "manual": [],
