@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FusionDash v3.0</title>
+
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <div id="wallpaper-layer"></div>
+    <div id="wallpaper-overlay"></div>
+
+    <div class="layout" id="main-layout">
+        <aside id="sidebar">
+            <div class="sidebar-header">
+                <div class="brand">
+                    <i id="brand-logo" class="ph-fill ph-hexagon"></i>
+                    <span id="brand-text" class="brand-text">FusionDash</span>
+                </div>
+                <button id="sidebar-toggle" class="btn-ghost"><i class="ph-bold ph-caret-double-left"></i></button>
+            </div>
+            <nav id="board-nav">
+                <div class="nav-label">BOARDS</div>
+                <div id="board-list"></div>
+                <button class="nav-item add-btn" id="create-board-btn">
+                    <i class="ph-bold ph-plus"></i> <span>New Board</span>
+                </button>
+            </nav>
+            <nav id="system-nav">
+                <div class="nav-label">SYSTEM</div>
+                <button class="nav-item" id="nav-library"><i class="ph ph-books"></i> <span>App Library</span></button>
+                <button class="nav-item" id="nav-settings"><i class="ph ph-sliders"></i> <span>System
+                        Settings</span></button>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="footer-info">v3.0 Pro</div>
+            </div>
+        </aside>
+
+        <main>
+            <header>
+                <div class="header-left">
+                    <h2 id="page-title">Dashboard</h2>
+                    <button class="btn-icon-glass" id="board-settings-btn"><i
+                            class="ph-bold ph-pencil-simple"></i></button>
+                </div>
+                <div class="header-actions">
+                    <div class="search-bar">
+                        <i class="ph ph-magnifying-glass"></i>
+                        <input type="text" id="search" placeholder="Search apps...">
+                    </div>
+                    <button id="header-add-section-btn" class="btn-accent">
+                        <i class="ph-bold ph-rows"></i> <span>Add Section</span>
+                    </button>
+                    <button id="mobile-menu-trigger" class="btn-icon-glass mobile-only"><i
+                            class="ph-bold ph-list"></i></button>
+                </div>
+            </header>
+
+            <div id="board-view" class="view-container">
+
+                <div class="board-section">
+                    <div class="section-header">
+                        <h3 class="section-title">Feature Showcase (Demo)</h3>
+                        <i class="ph-fill ph-star" style="color:var(--accent); font-size:0.8rem;"></i>
+                    </div>
+
+                    <div class="section-grid bento-grid">
+
+                        <div class="card">
+                            <div class="status-dot online" title="Online"></div>
+                            <div class="edit-trigger"><i class="ph-bold ph-dots-three"></i></div>
+                            <img src="https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/home-assistant.png"
+                                alt="HA">
+                            <div class="card-name">Home Assistant</div>
+                        </div>
+
+                        <div class="card wide">
+                            <div class="status-dot online"></div>
+                            <div class="edit-trigger"><i class="ph-bold ph-dots-three"></i></div>
+                            <div class="card-content-row">
+                                <img src="https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/pi-hole.png"
+                                    alt="Pihole">
+                                <div class="card-text-left">
+                                    <div class="card-name">Pi-Hole</div>
+                                    <div class="widget-stat">
+                                        <span class="stat-val">14%</span> Blocked
+                                    </div>
+                                    <div class="widget-stat-sub">24k Total Queries</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="status-dot offline" title="Offline"></div>
+                            <div class="edit-trigger"><i class="ph-bold ph-dots-three"></i></div>
+                            <img src="https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/portainer.png"
+                                alt="Portainer">
+                            <div class="card-name">Portainer</div>
+                            <div class="badge-error">Connection Lost</div>
+                        </div>
+
+                        <div class="card tall card-media"
+                            style="background-image: url('https://image.tmdb.org/t/p/w500/rCZPqFBzylF437839f8d8XZ98lD.jpg');">
+                            <div class="media-overlay"></div>
+                            <div class="status-dot online"></div>
+                            <div class="edit-trigger"><i class="ph-bold ph-dots-three"></i></div>
+                            <div class="media-content">
+                                <img src="https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/plex.png"
+                                    class="mini-icon">
+                                <div class="card-name">Plex</div>
+                                <div class="now-playing">
+                                    <i class="ph-fill ph-play-circle"></i>
+                                    <span>Interstellar</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card large">
+                            <div class="edit-trigger"><i class="ph-bold ph-dots-three"></i></div>
+                            <div class="card-name" style="margin-bottom:15px; font-size:1.1rem;">System Health</div>
+
+                            <div class="progress-group">
+                                <div class="prog-label"><span>CPU</span> <span>12%</span></div>
+                                <div class="prog-bar">
+                                    <div class="fill" style="width:12%; background:#00ff88;"></div>
+                                </div>
+                            </div>
+                            <div class="progress-group">
+                                <div class="prog-label"><span>RAM</span> <span>64%</span></div>
+                                <div class="prog-bar">
+                                    <div class="fill" style="width:64%; background:#ffaa00;"></div>
+                                </div>
+                            </div>
+                            <div class="progress-group">
+                                <div class="prog-label"><span>Disk</span> <span>45%</span></div>
+                                <div class="prog-bar">
+                                    <div class="fill" style="width:45%; background:#007cff;"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="status-dot online"></div>
+                            <div class="edit-trigger"><i class="ph-bold ph-dots-three"></i></div>
+                            <img src="https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/sonarr.png"
+                                alt="Sonarr">
+                            <div class="card-name">Sonarr</div>
+                            <div class="widget-pill"><i class="ph-bold ph-calendar"></i> 3 Airing</div>
+                        </div>
+
+                        <div class="card">
+                            <div class="status-dot online"></div>
+                            <div class="edit-trigger"><i class="ph-bold ph-dots-three"></i></div>
+                            <img src="https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/radarr.png"
+                                alt="Radarr">
+                            <div class="card-name">Radarr</div>
+                            <div class="widget-pill warning"><i class="ph-bold ph-warning"></i> 1 Missing</div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <div id="library-view" class="view-container hidden">
+                <div class="library-stats">
+                    <div class="stat-card"><span id="total-count">0</span><label>Total Apps</label></div>
+                </div>
+                <div id="library-grid" class="grid-compact"></div>
+            </div>
+        </main>
+    </div>
+
+    <div id="overlay"></div>
+    <script src="ui.js"></script>
+    <script src="render.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>

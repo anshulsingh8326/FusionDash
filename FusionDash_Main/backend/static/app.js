@@ -4,7 +4,7 @@ let State = {
     boards: [],
     prefs: {},
     activeBoardId: 'default',
-    currentView: 'board', 
+    currentView: 'board', // 'board' or 'library'
     statusTracker: {},
     editingSectionId: null,
     editingServiceId: null
@@ -23,6 +23,22 @@ async function init() {
     Render.renderSidebar(State.boards, State.activeBoardId);
     setupEventListeners();
 
+    // ROUTING: Check URL
+    const params = new URLSearchParams(window.location.search);
+    const viewParam = params.get('view');
+    const boardParam = params.get('board');
+
+    if (viewParam === 'library') {
+        State.currentView = 'library';
+    } else if(boardParam && State.boards.find(b => b.id === boardParam)) {
+        State.activeBoardId = boardParam;
+        State.currentView = 'board';
+    } else {
+        // Fallback to localstorage
+        const savedId = localStorage.getItem('fusion_active_board');
+        if(savedId && State.boards.find(b => b.id === savedId)) State.activeBoardId = savedId;
+    }
+
     try {
         const res = await fetch("/api/init");
         if(res.ok) {
@@ -31,19 +47,12 @@ async function init() {
             State.services.sort((a, b) => (a.order || 100) - (b.order || 100));
             updateCounts();
             
-            // ROUTING: Check URL for board ID
-            const params = new URLSearchParams(window.location.search);
-            const urlBoard = params.get('board');
-            if(urlBoard && State.boards.find(b => b.id === urlBoard)) {
-                State.activeBoardId = urlBoard;
+            // Initial Render based on Routing
+            if (State.currentView === 'library') {
+                renderLibrary();
             } else {
-                // Fallback to localstorage or default
-                const savedId = localStorage.getItem('fusion_active_board');
-                if(savedId && State.boards.find(b => b.id === savedId)) State.activeBoardId = savedId;
+                window.switchBoard(State.activeBoardId);
             }
-
-            if (State.currentView === 'board') window.switchBoard(State.activeBoardId);
-            else renderLibrary();
 
             startPings();
         }
@@ -54,19 +63,32 @@ function loadLocalData() {
     const savedBoards = localStorage.getItem('fusion_boards');
     if (savedBoards) {
         State.boards = JSON.parse(savedBoards);
-        // Migration
+        // DATA SAFETY & MIGRATION
         State.boards.forEach(b => {
+            // Ensure sections exist
             if (!b.sections) {
                 b.sections = [];
                 if (b.items && b.items.length > 0) b.sections.push({ id: 'sec_def', title: 'Main', items: b.items });
                 delete b.items;
             }
+            // Ensure section settings exist (Per-Section Config)
+            b.sections.forEach(sec => {
+                if (!sec.settings) {
+                    // Default to global settings if they exist, else standard
+                    sec.settings = {
+                        cardSize: b.settings?.cardSize || 'medium',
+                        style: b.settings?.style || 'standard'
+                    };
+                }
+            });
+            // Ensure Board settings exist
+            if(!b.settings) b.settings = { wallpaper: '', blur: 0, opacity: 0.5 };
         });
     } else {
         State.boards = [{ 
             id: 'default', name: 'Home', 
-            sections: [{ id: 's1', title: 'General', items: [] }],
-            settings: { cardSize: 'medium', style: 'standard' } 
+            sections: [{ id: 's1', title: 'General', items: [], settings: { cardSize: 'medium', style: 'standard' } }],
+            settings: { wallpaper: '', blur: 0, opacity: 0.5 } 
         }];
     }
     const savedPrefs = localStorage.getItem('fusion_prefs');
@@ -83,11 +105,13 @@ window.switchBoard = (id) => {
     State.currentView = 'board';
     localStorage.setItem('fusion_active_board', id);
 
-    // Update URL without reloading
+    // Update URL
     const newUrl = new URL(window.location);
     newUrl.searchParams.set('board', id);
+    newUrl.searchParams.delete('view'); // Remove library view
     window.history.pushState({}, '', newUrl);
 
+    // Toggle Views
     document.getElementById('board-view').classList.remove('hidden');
     document.getElementById('library-view').classList.add('hidden');
     document.getElementById('header-add-section-btn').classList.remove('hidden');
@@ -95,22 +119,26 @@ window.switchBoard = (id) => {
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
     document.getElementById('page-title').innerText = board.name;
     
-    // Pass current search term to render
     const searchTerm = document.getElementById('search').value.toLowerCase();
     
     Render.renderSidebar(State.boards, id);
     applyBoardTheme(board.settings);
-    Render.renderBoard(board, State.services, board.settings, searchTerm);
+    Render.renderBoard(board, State.services, searchTerm);
     
-    // IMMEDIATELY restore status colors
     reapplyStatus();
 };
 
 window.addSection = () => {
     const board = State.boards.find(b => b.id === State.activeBoardId);
-    const newSec = { id: `sec_${Date.now()}`, title: "New Section", items: [] };
+    const newSec = { 
+        id: `sec_${Date.now()}`, 
+        title: "New Section", 
+        items: [],
+        settings: { cardSize: 'medium', style: 'standard' } // Default settings
+    };
     board.sections.push(newSec);
     saveBoards();
+    // Reactivity: Re-render immediately
     window.switchBoard(State.activeBoardId);
 };
 
@@ -119,7 +147,12 @@ window.editSection = (id) => {
     const board = State.boards.find(b => b.id === State.activeBoardId);
     const sec = board.sections.find(s => s.id === id);
     if(!sec) return;
+    
     document.getElementById('sec-title').value = sec.title;
+    // Populate new settings dropdowns
+    document.getElementById('sec-style').value = sec.settings?.style || 'standard';
+    document.getElementById('sec-size').value = sec.settings?.cardSize || 'medium';
+    
     openModal('section-modal');
 };
 
@@ -130,8 +163,9 @@ window.editService = (id, e) => {
     if(!service) return;
 
     document.getElementById('e-name').value = service.name;
-    document.getElementById('e-source').value = service.displaySource || service.source || 'docker'; // Load Source
+    document.getElementById('e-source').value = service.displaySource || service.source || 'docker';
     document.getElementById('e-group').value = service.group || "General";
+    document.getElementById('e-desc').value = service.description || ""; // New Description
     document.getElementById('e-href').value = service.href;
     document.getElementById('e-icon').value = service.icon || "";
     document.getElementById('e-widget').value = service.widgetType || "";
@@ -142,7 +176,7 @@ window.editService = (id, e) => {
         delBtn.innerText = "Remove from Board";
         delBtn.className = 'btn btn-secondary';
     } else {
-        delBtn.innerText = "Uninstall Service";
+        delBtn.innerText = "Uninstall Service"; // Library view logic
         delBtn.className = 'btn btn-danger';
     }
 
@@ -157,7 +191,11 @@ window.handleDragEnd = (evt) => {
         const domSec = [...sectionDivs].find(d => d.dataset.id === sec.id);
         if (domSec) {
             const grid = domSec.querySelector('.section-grid');
-            const newItems = [...grid.children].map(c => c.dataset.id);
+            const newItems = [...grid.children].map(c => {
+                // Handle system widget special case
+                if(c.dataset.id === 'builtin_status_summary') return 'builtin_status_summary';
+                return c.dataset.id;
+            });
             sec.items = newItems;
         }
     });
@@ -226,7 +264,7 @@ function setupEventListeners() {
         const newId = 'b_' + Date.now();
         State.boards.push({ 
             id: newId, name: 'New Board', 
-            sections: [{id: 's1', title: 'Main', items: []}], 
+            sections: [{id: 's1', title: 'Main', items: [], settings: { cardSize: 'medium', style: 'standard' }}], 
             settings: { cardSize: 'medium' } 
         });
         saveBoards();
@@ -236,6 +274,12 @@ function setupEventListeners() {
 
     document.getElementById('nav-library').onclick = () => {
         State.currentView = 'library';
+        // Update URL
+        const newUrl = new URL(window.location);
+        newUrl.searchParams.set('view', 'library');
+        newUrl.searchParams.delete('board');
+        window.history.pushState({}, '', newUrl);
+
         renderLibrary();
         document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
         document.getElementById('nav-library').classList.add('active');
@@ -246,26 +290,23 @@ function setupEventListeners() {
         document.getElementById('g-logo').value = State.prefs.logo || '';
         document.getElementById('g-accent').value = State.prefs.accent || '#007cff';
         document.getElementById('g-side-opacity').value = State.prefs.sideOpacity || 0.85;
-        document.getElementById('g-autocollapse').checked = State.prefs.autoCollapse || false; // Set checked state
+        document.getElementById('g-autocollapse').checked = State.prefs.autoCollapse || false;
         openModal('global-settings-modal');
     };
 
     document.getElementById('header-add-section-btn').onclick = window.addSection;
     
+    // BOARD SETTINGS (Visual Only now)
     document.getElementById('board-settings-btn').onclick = () => {
         const board = State.boards.find(b => b.id === State.activeBoardId);
         document.getElementById('b-name').value = board.name;
         document.getElementById('b-wallpaper').value = board.settings.wallpaper || '';
         document.getElementById('b-blur').value = board.settings.blur || 0;
         document.getElementById('b-opacity').value = board.settings.opacity || 0.5;
-        document.getElementById('b-style').value = board.settings.style || 'standard';
-        document.getElementById('b-cardsize').value = board.settings.cardSize || 'medium';
-        document.getElementById('b-align').value = board.settings.align || 'left';
         document.getElementById('b-fit').value = board.settings.fit || 'cover';
         openModal('board-modal');
     };
 
-    // SEARCH LISTENER FIX
     document.getElementById('search').oninput = () => {
         if(State.currentView === 'board') window.switchBoard(State.activeBoardId);
         else renderLibrary();
@@ -275,15 +316,13 @@ function setupEventListeners() {
     document.querySelectorAll('.close-modal').forEach(b => b.onclick = closeModals);
     document.getElementById('close-editor').onclick = closeModals;
 
+    // SAVE BOARD
     document.getElementById('save-board-btn').onclick = () => {
         const board = State.boards.find(b => b.id === State.activeBoardId);
         board.name = document.getElementById('b-name').value;
         board.settings.wallpaper = document.getElementById('b-wallpaper').value;
         board.settings.blur = document.getElementById('b-blur').value;
         board.settings.opacity = document.getElementById('b-opacity').value;
-        board.settings.style = document.getElementById('b-style').value;
-        board.settings.cardSize = document.getElementById('b-cardsize').value;
-        board.settings.align = document.getElementById('b-align').value;
         board.settings.fit = document.getElementById('b-fit').value;
         saveBoards();
         window.switchBoard(State.activeBoardId);
@@ -299,11 +338,16 @@ function setupEventListeners() {
         closeModals();
     };
 
+    // SAVE SECTION
     document.getElementById('save-section-btn').onclick = () => {
         const board = State.boards.find(b => b.id === State.activeBoardId);
         const sec = board.sections.find(s => s.id === State.editingSectionId);
         if(sec) {
             sec.title = document.getElementById('sec-title').value;
+            // Save new Per-Section settings
+            sec.settings.style = document.getElementById('sec-style').value;
+            sec.settings.cardSize = document.getElementById('sec-size').value;
+            
             saveBoards();
             window.switchBoard(State.activeBoardId);
         }
@@ -339,8 +383,9 @@ function setupEventListeners() {
         closeModals();
         State.editingServiceId = null;
         document.getElementById('e-name').value = "";
-        document.getElementById('e-source').value = "web"; // Default
+        document.getElementById('e-source').value = "web";
         document.getElementById('e-group').value = "";
+        document.getElementById('e-desc').value = "";
         document.getElementById('e-href').value = "";
         document.getElementById('e-icon').value = "";
         document.getElementById('e-widget').value = "";
@@ -352,8 +397,9 @@ function setupEventListeners() {
     document.getElementById('save-service-btn').onclick = async () => {
         const payload = {
             name: document.getElementById('e-name').value,
-            displaySource: document.getElementById('e-source').value, // SAVE SOURCE
+            displaySource: document.getElementById('e-source').value,
             group: document.getElementById('e-group').value,
+            description: document.getElementById('e-desc').value, // SAVE DESC
             href: document.getElementById('e-href').value,
             icon: document.getElementById('e-icon').value,
             widgetType: document.getElementById('e-widget').value,
@@ -367,11 +413,10 @@ function setupEventListeners() {
         await fetch(url, { method: "POST", body: JSON.stringify(payload), headers: {'Content-Type': 'application/json'} });
         
         if (!State.editingServiceId && currentPickerSectionId) {
-             // If this was a new add, force reload to get ID then manual push logic (simplified: full reload)
              location.reload(); 
         } else {
             closeModals();
-            init();
+            init(); // Re-init to fetch updated data
         }
     };
 
@@ -383,6 +428,7 @@ function setupEventListeners() {
             window.switchBoard(State.activeBoardId);
         } else {
             if(!confirm("Permanently uninstall?")) return;
+            // Remove from all boards
             State.boards.forEach(b => {
                 b.sections.forEach(s => { s.items = s.items.filter(id => id !== State.editingServiceId); });
             });
@@ -408,12 +454,12 @@ function renderLibrary() {
 
     State.services.forEach(s => {
         if(term && !s.name.toLowerCase().includes(term)) return;
-        const card = Render.createCard(s);
+        // Library always uses standard small/medium cards
+        const card = Render.createCard(s, { style: 'standard' });
         card.draggable = false;
         grid.appendChild(card);
     });
     
-    // Also reapply status in library view
     reapplyStatus();
 }
 
@@ -434,21 +480,18 @@ async function checkServiceStatus(service) {
             const res = await fetch(`/api/status/ping?url=${encodeURIComponent(service.href)}`);
             const data = await res.json();
             updateStatusUI(service.id, data.status === 'online');
-            if(data.status === 'online' && service.widgetType) fetchApiData(service);
+            if(data.status === 'online') Widgets.fetch(service);
         } catch { updateStatusUI(service.id, false); }
     }
 }
 
 function updateStatusUI(id, isOnline) {
     State.statusTracker[id] = isOnline ? 'online' : 'offline';
-    // Update live DOM elements
     document.querySelectorAll(`.js-status-${id}`).forEach(el => {
         el.className = `status-dot js-status-${id} ${isOnline ? 'online' : 'offline'}`;
     });
-    updateWidgetUI();
 }
 
-// NEW: Function to re-paint status colors on view change
 function reapplyStatus() {
     Object.keys(State.statusTracker).forEach(id => {
         const status = State.statusTracker[id];
@@ -457,36 +500,8 @@ function reapplyStatus() {
             el.className = `status-dot js-status-${id} ${cls}`;
         });
     });
-    updateWidgetUI();
-}
-
-function updateWidgetUI() {
-    const widgetDots = document.querySelector('.status-dots-row .loading-dots');
-    if(widgetDots) {
-        const online = Object.values(State.statusTracker).filter(s => s === 'online').length;
-        widgetDots.innerText = `${online} / ${State.services.length} Services Online`;
-        widgetDots.style.color = '#fff';
-    }
-}
-
-async function fetchApiData(service) {
-    const el = document.getElementById(`widget-${service.id}`);
-    if(!el) return;
-    if(service.widgetType === 'arr_queue') {
-        try {
-            const res = await fetch(`/api/integration/arr/queue?url=${encodeURIComponent(service.href)}&api_key=${service.apiKey}`);
-            const data = await res.json();
-            const content = el.querySelector('.api-content');
-            el.classList.remove('hidden');
-            if (data.count > 0) {
-                content.innerText = `${data.count} Active Downloads`;
-                content.style.color = '#4facfe';
-            } else {
-                content.innerText = "Queue Idle";
-                content.style.color = '#666';
-            }
-        } catch(e) {}
-    }
+    // Re-trigger widget refreshes on view change
+    Widgets.refreshAll(State.services);
 }
 
 function saveBoards() { localStorage.setItem('fusion_boards', JSON.stringify(State.boards)); }
@@ -504,7 +519,6 @@ function applyBoardTheme(s) {
     if(!s) return;
     const bg = document.getElementById('wallpaper-layer');
     bg.style.backgroundImage = s.wallpaper ? `url('${s.wallpaper}')` : 'none';
-    // FIX: Force cover if not set
     bg.style.backgroundSize = s.fit || 'cover';
     bg.style.filter = `blur(${s.blur||0}px)`;
     document.getElementById('wallpaper-overlay').style.opacity = s.opacity || 0.5;

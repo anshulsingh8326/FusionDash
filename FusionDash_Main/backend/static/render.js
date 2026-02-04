@@ -3,61 +3,52 @@ const Render = {
     getIcon(service) {
         if (!service.icon) return `<i class="ph ph-cube" style="font-size:32px;"></i>`;
         let src = service.icon;
+        // If it's a simple name like "plex", use the CDN
         if (!src.includes('/') && !src.includes('.')) {
             src = `https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${service.icon.toLowerCase()}.png`;
         }
         return `<img src="${src}" onerror="this.src='https://unpkg.com/@phosphor-icons/core/assets/duotone/cube-duotone.svg'">`;
     },
 
-    // --- Status Widget ---
-    createStatusWidget(data) {
-        const div = document.createElement('div');
-        div.className = 'card status-widget-card';
-        div.dataset.id = 'builtin_status_summary';
-        
-        const dockerCount = data.filter(s => s.source === 'docker').length;
-        const webCount = data.filter(s => s.source !== 'docker').length;
-        
-        div.innerHTML = `
-            <div class="widget-header">
-                <i class="ph-fill ph-activity" style="color:var(--accent)"></i>
-                <span>System Status</span>
-            </div>
-            <div class="widget-row">
-                <div class="stat-pill"><span class="label">Docker</span><span class="value">${dockerCount}</span></div>
-                <div class="stat-pill"><span class="label">Web</span><span class="value">${webCount}</span></div>
-            </div>
-            <div class="widget-row status-dots-row"><div class="loading-dots">Checking...</div></div>
-            <div class="edit-trigger" onclick="removeWidget('builtin_status_summary')"><i class="ph-bold ph-trash"></i></div>
-        `;
-        return div;
-    },
-
     // --- Standard Card ---
-    createCard(service) {
+    createCard(service, sectionSettings = {}) {
         const card = document.createElement('div');
-        card.className = "card app-card";
+        
+        // Dynamic Classes based on Section Settings
+        const styleClass = sectionSettings.style ? `style-${sectionSettings.style}` : 'style-standard';
+        card.className = `card app-card ${styleClass}`;
         card.dataset.id = service.id; 
 
-        // Use 'displaySource' if edited, else fallback to 'source'
+        // Label Logic
         let typeLabel = (service.displaySource || service.source || 'WEB').toUpperCase();
-        if(typeLabel === 'MANUAL') typeLabel = 'WEB'; // Fallback for old data
+        if(typeLabel === 'MANUAL') typeLabel = 'WEB';
+
+        // Description Logic
+        const hasDesc = service.description && service.description.trim().length > 0;
+        const descHtml = hasDesc ? `<div class="card-desc">${service.description}</div>` : '';
+
+        // Widget HTML (Placeholder)
+        const widgetHtml = Widgets.renderContainer(service);
 
         card.innerHTML = `
-            <div class="card-top">
-                <div class="type-badge">
-                    <div class="status-dot js-status-${service.id}"></div>
-                    <span>${typeLabel}</span>
+            <div class="card-content-wrapper">
+                <div class="status-dot js-status-${service.id}"></div>
+                
+                <div class="card-icon-area">
+                    ${this.getIcon(service)}
+                </div>
+
+                <div class="card-info-area">
+                    <div class="card-header">
+                        <div class="card-name">${service.name}</div>
+                        <div class="type-badge">${typeLabel}</div>
+                    </div>
+                    ${descHtml}
                 </div>
             </div>
-            <div class="card-main">
-                ${this.getIcon(service)}
-                <div class="card-name">${service.name}</div>
-            </div>
-            <div class="card-api hidden" id="widget-${service.id}">
-                <div class="api-divider"></div>
-                <div class="api-content">Loading...</div>
-            </div>
+
+            ${widgetHtml}
+
             <div class="edit-trigger" onclick="window.editService('${service.id}', event)">
                 <i class="ph-bold ph-dots-three-vertical"></i>
             </div>
@@ -70,30 +61,36 @@ const Render = {
         return card;
     },
 
-    // --- Board Rendering (With Search) ---
-    renderBoard(board, allServices, settings, searchTerm = "") {
+    // --- Board Rendering ---
+    renderBoard(board, allServices, searchTerm = "") {
         const container = document.getElementById('board-view');
         container.innerHTML = '';
         container.className = 'view-container'; 
         
-        if (settings.style) container.classList.add(`style-${settings.style}`);
-        if (settings.align === 'center') container.classList.add('align-center');
+        // Global board settings for background are handled in app.js applyBoardTheme, 
+        // but layout settings are now PER SECTION.
 
         let hasVisibleItems = false;
 
         board.sections.forEach(section => {
+            // Data Safety: Default settings if missing
+            const settings = section.settings || { cardSize: 'medium', style: 'standard' };
+
             const secDiv = document.createElement('div');
             secDiv.className = 'board-section';
             secDiv.dataset.id = section.id;
 
-            const gridClass = `grid-${settings.cardSize || 'medium'}`;
-            
+            // Header
             secDiv.innerHTML = `
                 <div class="section-header">
-                    <h4 class="section-title" onclick="editSection('${section.id}')">${section.title} <i class="ph-fill ph-pencil-simple-slash edit-icon"></i></h4>
-                    <button class="btn-ghost btn-sm" onclick="openAppPicker('${section.id}')"><i class="ph-bold ph-plus"></i></button>
+                    <h4 class="section-title" onclick="editSection('${section.id}')">
+                        ${section.title} <i class="ph-fill ph-pencil-simple-slash edit-icon"></i>
+                    </h4>
+                    <button class="btn-ghost btn-sm" onclick="openAppPicker('${section.id}')">
+                        <i class="ph-bold ph-plus"></i>
+                    </button>
                 </div>
-                <div class="section-grid ${gridClass}" data-section="${section.id}"></div>
+                <div class="section-grid grid-${settings.cardSize} style-${settings.style}" data-section="${section.id}"></div>
             `;
 
             const grid = secDiv.querySelector('.section-grid');
@@ -101,8 +98,8 @@ const Render = {
             
             section.items.forEach(itemId => {
                 if (itemId === 'builtin_status_summary') {
-                    // Widgets always show unless filtered? Let's show them.
-                    grid.appendChild(this.createStatusWidget(allServices));
+                    // Use the new System Widget from Widgets.js
+                    grid.innerHTML += Widgets.renderSystemWidget(allServices);
                     sectionHasItems = true;
                 } else {
                     const service = allServices.find(s => s.id === itemId);
@@ -110,38 +107,42 @@ const Render = {
                         // SEARCH FILTER
                         if(searchTerm && !service.name.toLowerCase().includes(searchTerm)) return;
                         
-                        grid.appendChild(this.createCard(service));
+                        grid.appendChild(this.createCard(service, settings));
                         sectionHasItems = true;
                     }
                 }
             });
 
-            if(sectionHasItems) {
-                new Sortable(grid, {
-                    group: 'shared',
-                    animation: 150,
-                    ghostClass: 'sortable-ghost',
-                    onEnd: window.handleDragEnd
-                });
+            // Initialize Sortable only if section has items or to allow dropping
+            new Sortable(grid, {
+                group: 'shared',
+                animation: 150,
+                ghostClass: 'sortable-ghost',
+                onEnd: window.handleDragEnd
+            });
+
+            // Only append section if it has items OR if we are not searching (show empty sections when not searching)
+            if(sectionHasItems || !searchTerm) {
                 container.appendChild(secDiv);
                 hasVisibleItems = true;
             }
         });
 
         // Empty States
-        if (!hasVisibleItems) {
-            if(searchTerm) {
-                container.innerHTML = `<div style="text-align:center; color:#666; padding-top:50px;">No apps found matching "${searchTerm}"</div>`;
-            } else if (board.sections.length === 0) {
-                container.innerHTML = `
-                    <div class="empty-board-state">
-                        <i class="ph ph-kanban"></i>
-                        <p>Start by adding a section</p>
-                        <button onclick="window.addSection()" class="btn btn-primary">Create Section</button>
-                    </div>
-                `;
-            }
+        if (!hasVisibleItems && searchTerm) {
+            container.innerHTML = `<div style="text-align:center; color:#666; padding-top:50px;">No apps found matching "${searchTerm}"</div>`;
+        } else if (board.sections.length === 0) {
+            container.innerHTML = `
+                <div class="empty-board-state">
+                    <i class="ph ph-kanban"></i>
+                    <p>Start by adding a section</p>
+                    <button onclick="window.addSection()" class="btn btn-primary">Create Section</button>
+                </div>
+            `;
         }
+        
+        // After rendering, trigger widget fetches
+        Widgets.refreshAll(allServices);
     },
 
     // --- Sidebar ---
