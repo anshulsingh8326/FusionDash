@@ -16,15 +16,13 @@
     <div id="wallpaper-overlay"></div>
 
     <div class="layout" id="main-layout">
+
         <aside id="sidebar">
             <div class="sidebar-header">
                 <div class="brand">
                     <i id="brand-logo" class="ph-fill ph-hexagon" style="color:var(--accent)"></i>
                     <span id="brand-text" class="brand-text">FusionDash</span>
                 </div>
-                <button id="sidebar-toggle" class="btn-ghost">
-                    <i class="ph-bold ph-caret-double-left"></i>
-                </button>
             </div>
 
             <nav id="board-nav">
@@ -47,13 +45,17 @@
             </nav>
 
             <div class="sidebar-footer">
-                <div class="footer-info">v2.4</div>
+                <div class="footer-info">v2.9</div>
             </div>
         </aside>
 
         <main>
             <header>
                 <div class="header-left">
+                    <button id="sidebar-toggle" class="btn-icon-small">
+                        <i class="ph-bold ph-list"></i>
+                    </button>
+
                     <h2 id="page-title">Loading...</h2>
                     <button class="btn-icon-small" id="board-settings-btn" title="Board Appearance">
                         <i class="ph-bold ph-pencil-simple"></i>
@@ -92,9 +94,23 @@
         </div>
         <div class="modal-body">
             <div class="field"><label>Board Name</label><input id="b-name" type="text"></div>
+
+            <div class="field">
+                <label>Board Icon</label>
+                <div style="display:flex; gap:5px;">
+                    <input id="b-icon" type="text" placeholder="URL or Class">
+                    <button class="btn btn-secondary" style="padding:0 12px;"><i
+                            class="ph-bold ph-upload-simple"></i></button>
+                </div>
+            </div>
+
             <div class="field-group">
                 <label>Background</label>
-                <input id="b-wallpaper" type="text" placeholder="Image URL">
+                <div style="display:flex; gap:5px; margin-bottom:10px;">
+                    <input id="b-wallpaper" type="text" placeholder="Image URL">
+                    <button class="btn btn-secondary" style="padding:0 12px;"><i
+                            class="ph-bold ph-upload-simple"></i></button>
+                </div>
                 <div class="control-row">
                     <div class="sub-field"><label>Blur</label><input id="b-blur" type="range" min="0" max="20"></div>
                     <div class="sub-field"><label>Dim</label><input id="b-opacity" type="range" min="0" max="0.9"
@@ -122,6 +138,18 @@
         </div>
         <div class="modal-body">
             <div class="field"><label>Section Title</label><input id="sec-title" type="text"></div>
+
+            <div class="control-row">
+                <div class="sub-field">
+                    <label>Header Icon</label>
+                    <div style="display:flex; gap:5px;">
+                        <input id="sec-icon" type="text" placeholder="Icon URL / Class">
+                        <button class="btn btn-secondary" style="padding:0 12px;"><i
+                                class="ph-bold ph-upload-simple"></i></button>
+                    </div>
+                </div>
+            </div>
+
             <div class="field-group">
                 <label>Layout & Style</label>
                 <div class="control-row">
@@ -131,6 +159,7 @@
                             <option value="standard">Grid (Standard)</option>
                             <option value="wide">List (Wide Row)</option>
                             <option value="neon">Grid (Neon)</option>
+                            <option value="circular">Circular (Icon Only)</option>
                         </select>
                     </div>
                     <div class="sub-field">
@@ -140,6 +169,24 @@
                             <option value="medium">Medium</option>
                             <option value="large">Large</option>
                         </select>
+                    </div>
+                </div>
+
+                <div class="control-row" style="margin-top:10px;">
+                    <div class="sub-field">
+                        <label>Alignment</label>
+                        <select id="sec-align">
+                            <option value="left">Left</option>
+                            <option value="center">Center</option>
+                            <option value="right">Right</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="field" style="margin-top:15px; display:flex; flex-direction:column; gap:10px;">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <input type="checkbox" id="sec-autofill" style="width:auto;">
+                        <label style="margin:0; cursor:pointer;" for="sec-autofill">Auto-Fill Width</label>
                     </div>
                 </div>
             </div>
@@ -175,12 +222,25 @@
             <div class="field-group">
                 <label>Branding</label>
                 <div class="field"><label>Name</label><input id="g-appname" type="text"></div>
-                <div class="field"><label>Logo</label><input id="g-logo" type="text"></div>
+                <div class="field">
+                    <label>Logo</label>
+                    <div style="display:flex; gap:5px;">
+                        <input id="g-logo" type="text" placeholder="Logo URL">
+                        <button class="btn btn-secondary" style="padding:0 12px;"><i
+                                class="ph-bold ph-upload-simple"></i></button>
+                    </div>
+                </div>
             </div>
             <div class="field-group">
                 <label>Theme</label>
                 <div class="field"><label>Accent Color</label><input id="g-accent" type="color" style="height:40px;">
                 </div>
+
+                <div class="field">
+                    <label>Sidebar Color</label>
+                    <input id="g-sidebar-color" type="color" style="height:40px;">
+                </div>
+
                 <div class="field"><label>Sidebar Opacity</label><input id="g-side-opacity" type="range" min="0.2"
                         max="1" step="0.1"></div>
                 <div class="field" style="margin-top:15px; display:flex; align-items:center; gap:10px;">
@@ -196,43 +256,61 @@
     </div>
 
     <div id="editor-side">
-        <h3>Edit Service</h3>
-        <div class="field"><label>Display Name</label><input id="e-name" type="text"></div>
+        <h3 style="text-align: center; margin-bottom: 25px;">Edit Service</h3>
 
-        <div class="control-row">
-            <div class="sub-field">
-                <label>Type</label>
-                <select id="e-source">
-                    <option value="docker">Docker</option>
-                    <option value="web">Web App</option>
-                    <option value="windows">Windows App</option>
-                    <option value="other">Other</option>
-                </select>
+        <div class="editor-content" style="padding-bottom: 80px;">
+            <div class="field"><label>Display Name</label><input id="e-name" type="text"></div>
+
+            <div class="control-row">
+                <div class="sub-field">
+                    <label>Type</label>
+                    <select id="e-source">
+                        <option value="docker">Docker</option>
+                        <option value="web">Web App</option>
+                        <option value="windows">Windows App</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="sub-field">
+                    <label>Group</label><input id="e-group" type="text">
+                </div>
             </div>
-            <div class="sub-field">
-                <label>Group</label><input id="e-group" type="text">
+
+            <div class="field"><label>Description</label><input id="e-desc" type="text" placeholder="Brief details...">
+            </div>
+            <div class="field"><label>URL</label><input id="e-href" type="text"></div>
+
+            <div class="field-group" style="margin-top:20px;">
+                <label>Visuals</label>
+                <div class="field">
+                    <label>Icon Source</label>
+                    <div class="control-row" style="margin-top:0;">
+                        <input id="e-icon" type="text" placeholder="Icon URL or Path">
+                        <button id="e-upload-btn" class="btn btn-secondary" style="width:60px;" title="Upload Image">
+                            <i class="ph-bold ph-upload-simple"></i>
+                        </button>
+                    </div>
+                    <small style="color:var(--dim); font-size:0.7em; display:block; margin-top:5px;">
+                        Upload overrides URL. URL overrides Auto-fetch.
+                    </small>
+                </div>
+            </div>
+
+            <div class="field-group" style="margin-top:20px;">
+                <label>API Integration</label>
+                <div class="field"><label>Widget Type</label><select id="e-widget">
+                        <option value="">None</option>
+                        <option value="arr_queue">Arr Queue</option>
+                    </select></div>
+                <div class="field"><label>API Key</label><input id="e-apikey" type="password"></div>
             </div>
         </div>
 
-        <div class="field"><label>Description</label><input id="e-desc" type="text" placeholder="Brief details...">
-        </div>
-        <div class="field"><label>URL</label><input id="e-href" type="text"></div>
-        <div class="field"><label>Icon URL</label><input id="e-icon" type="text"></div>
-
-        <div class="field-group" style="margin-top:20px;">
-            <label>API Integration</label>
-            <div class="field"><label>Widget Type</label><select id="e-widget">
-                    <option value="">None</option>
-                    <option value="arr_queue">Arr Queue</option>
-                </select></div>
-            <div class="field"><label>API Key</label><input id="e-apikey" type="password"></div>
-        </div>
-
-        <div class="actions-stack">
-            <button id="save-service-btn" class="btn btn-primary">Save Changes</button>
-            <div class="action-row">
-                <button id="delete-service-btn" class="btn btn-secondary">Remove</button>
-                <button id="close-editor" class="btn btn-text">Cancel</button>
+        <div class="editor-footer actions-stack">
+            <button id="save-service-btn" class="btn btn-primary" style="width:100%;">Save Changes</button>
+            <div class="action-row" style="margin-top:10px;">
+                <button id="delete-service-btn" class="btn btn-danger">Remove</button>
+                <button id="close-editor" class="btn btn-secondary">Cancel</button>
             </div>
         </div>
     </div>
