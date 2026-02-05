@@ -627,7 +627,7 @@ header {
     
     /* FORCE SIZING (Medium/Default) - The !important is key here */
     min-height: 50px !important;
-    max-height: 120px !important;
+    max-height: 110px !important;
     padding: 8px 20px !important;
 }
 
@@ -740,7 +740,7 @@ header {
 .style-wide .card:hover .edit-trigger { opacity: 1; }
 
 
-/* ### 08 — CIRCULAR MODE (Overflow Fix) ### */
+/* ### 08 — CIRCULAR MODE (Overflow Fix + ICON SIZE CONTROL) ### */
 .style-circular.section-grid {
     display: flex;
     flex-wrap: wrap;
@@ -748,8 +748,9 @@ header {
 }
 
 .style-circular .card {
+    position: relative;
     border-radius: 50%;
-    aspect-ratio: 1/1;
+    aspect-ratio: 1 / 1;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -758,10 +759,11 @@ header {
     min-height: unset;
     gap: 4px;
 
-    /* CRITICAL: Hard clip content that exceeds the circle */
+    /* hard clip */
     overflow: hidden;
 }
 
+/* ==== CARD SIZES ==== */
 .style-circular.grid-small .card {
     width: 100px;
     height: 100px;
@@ -780,34 +782,49 @@ header {
     flex: 0 0 180px;
 }
 
+/* ==== ICON AREA ==== */
 .style-circular .card-icon-area {
     margin: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
-.style-circular .card-icon-area img {
+/* default (medium) */
+.style-circular.grid-medium .card-icon-area img {
     width: 48px;
     height: 48px;
-    margin-bottom: 0;
 }
 
+/* small */
+.style-circular.grid-small .card-icon-area img {
+    width: 32px;
+    height: 32px;
+}
+
+/* large */
+.style-circular.grid-large .card-icon-area img {
+    width: 64px;
+    height: 64px;
+}
+
+/* ==== TITLE ==== */
 .style-circular .card-name {
     font-size: 0.7rem !important;
     text-align: center;
     line-height: 1.2;
     margin: 0;
 
-    /* FORCE TEXT CONTAINMENT */
+    /* original behavior */
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-
-    /* Limit width to 85% of the card to prevent touching edges */
-   
+    max-width: none;
     min-width: 0;
     display: block;
 }
 
-/* Hide extra elements */
+/* ==== HIDE EXTRAS ==== */
 .style-circular .status-dot,
 .style-circular .type-badge,
 .style-circular .card-desc,
@@ -815,6 +832,7 @@ header {
     display: none;
 }
 
+/* ==== EDIT BUTTON ==== */
 .style-circular .edit-trigger {
     position: absolute;
     top: 10%;
