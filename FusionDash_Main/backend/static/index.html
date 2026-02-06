@@ -157,6 +157,7 @@
                         <label>View Mode</label>
                         <select id="sec-style">
                             <option value="standard">Grid (Standard)</option>
+                            <option value="fixed">Grid (Fixed Cols)</option>
                             <option value="wide">List (Wide Row)</option>
                             <option value="neon">Grid (Neon)</option>
                             <option value="circular">Circular (Icon Only)</option>
@@ -172,6 +173,20 @@
                     </div>
                 </div>
 
+                <div id="fixed-config-container" class="control-row"
+                    style="margin-top:15px; border-top:1px solid var(--border); padding-top:15px;">
+                    <div class="sub-field">
+                        <label>Columns</label>
+                        <input id="sec-col-count" type="number" min="1" max="8" value="4" placeholder="4">
+                    </div>
+                    <div class="sub-field" style="display:flex; align-items:center; padding-top:20px;">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <input type="checkbox" id="sec-autofill" checked style="width:auto;">
+                            <label style="margin:0; cursor:pointer;" for="sec-autofill">Stretch Cards</label>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="control-row" style="margin-top:10px;">
                     <div class="sub-field">
                         <label>Alignment</label>
@@ -180,13 +195,6 @@
                             <option value="center">Center</option>
                             <option value="right">Right</option>
                         </select>
-                    </div>
-                </div>
-
-                <div class="field" style="margin-top:15px; display:flex; flex-direction:column; gap:10px;">
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <input type="checkbox" id="sec-autofill" style="width:auto;">
-                        <label style="margin:0; cursor:pointer;" for="sec-autofill">Auto-Fill Width</label>
                     </div>
                 </div>
             </div>

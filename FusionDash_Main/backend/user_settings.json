@@ -131,7 +131,9 @@
       "pinned": true
     }
   ],
-  "hidden": [],
+  "hidden": [
+    "manual_101"
+  ],
   "theme": {
     "wallpaper": "https://c4.wallpaperflare.com/wallpaper/586/603/742/minimalism-4k-for-mac-desktop-wallpaper-preview.jpg",
     "accent": "#00b3ff",

@@ -142,6 +142,7 @@ window.addSection = () => {
     window.switchBoard(State.activeBoardId);
 };
 
+// --- UPDATED EDIT SECTION ---
 window.editSection = (id) => {
     State.editingSectionId = id;
     const board = State.boards.find(b => b.id === State.activeBoardId);
@@ -149,9 +150,25 @@ window.editSection = (id) => {
     if(!sec) return;
     
     document.getElementById('sec-title').value = sec.title;
-    // Populate new settings dropdowns
-    document.getElementById('sec-style').value = sec.settings?.style || 'standard';
+    
+    // Populate settings dropdowns
+    const currentStyle = sec.settings?.style || 'standard';
+    document.getElementById('sec-style').value = currentStyle;
     document.getElementById('sec-size').value = sec.settings?.cardSize || 'medium';
+    
+    // Populate Fixed Grid Settings
+    // Default columns to 4 if not set. Default stretch to true if not set (undefined !== false).
+    document.getElementById('sec-col-count').value = sec.settings?.columns || 4;
+    document.getElementById('sec-autofill').checked = sec.settings?.stretch !== false;
+
+    // Initialize Conditional Visibility
+    const configContainer = document.getElementById('fixed-config-container');
+    if (configContainer) {
+        configContainer.style.display = currentStyle === 'fixed' ? 'block' : 'none';
+    }
+
+    // LOAD: Get saved Alignment, default to 'left'
+    document.getElementById('sec-align').value = sec.settings?.align || 'left';
     
     openModal('section-modal');
 };
@@ -254,6 +271,15 @@ window.removeWidget = (id) => {
 
 // --- LISTENERS ---
 function setupEventListeners() {
+    
+    // --- NEW: Section Style Dropdown Listener ---
+    document.getElementById('sec-style').addEventListener('change', (e) => {
+        const configContainer = document.getElementById('fixed-config-container');
+        if (configContainer) {
+            configContainer.style.display = e.target.value === 'fixed' ? 'block' : 'none';
+        }
+    });
+
     document.getElementById('sidebar-toggle').onclick = () => {
         const sb = document.getElementById('sidebar');
         if(window.innerWidth <= 768) sb.classList.toggle('mobile-open');
@@ -338,7 +364,7 @@ function setupEventListeners() {
         closeModals();
     };
 
-    // SAVE SECTION
+    // --- UPDATED SAVE SECTION ---
     document.getElementById('save-section-btn').onclick = () => {
         const board = State.boards.find(b => b.id === State.activeBoardId);
         const sec = board.sections.find(s => s.id === State.editingSectionId);
@@ -347,6 +373,13 @@ function setupEventListeners() {
             // Save new Per-Section settings
             sec.settings.style = document.getElementById('sec-style').value;
             sec.settings.cardSize = document.getElementById('sec-size').value;
+            
+            // SAVE: Capture the alignment value
+            sec.settings.align = document.getElementById('sec-align').value;
+            
+            // Fixed Grid Data
+            sec.settings.columns = parseInt(document.getElementById('sec-col-count').value) || 4;
+            sec.settings.stretch = document.getElementById('sec-autofill').checked;
             
             saveBoards();
             window.switchBoard(State.activeBoardId);

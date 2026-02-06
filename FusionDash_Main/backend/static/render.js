@@ -74,13 +74,29 @@ const Render = {
 
         board.sections.forEach(section => {
             // Data Safety: Default settings if missing
-            const settings = section.settings || { cardSize: 'medium', style: 'standard' };
+            const settings = section.settings || { cardSize: 'medium', style: 'standard', align: 'left' };
 
             const secDiv = document.createElement('div');
             secDiv.className = 'board-section';
             secDiv.dataset.id = section.id;
 
-            // Header
+            // --- Dynamic Class Generation for Grid ---
+            let gridClasses = `section-grid grid-${settings.cardSize} style-${settings.style}`;
+            // NEW: Add Alignment Class
+            if (settings.align) {
+                gridClasses += ` align-${settings.align}`;
+            }
+            
+            
+            // Add Fixed Grid classes if applicable
+            if (settings.style === 'fixed') {
+                gridClasses += ` cols-${settings.columns || 4}`; // Default to 4 columns
+                if (settings.stretch !== false) {
+                    gridClasses += ' autofill';
+                }
+            }
+
+            // Header and Grid
             secDiv.innerHTML = `
                 <div class="section-header">
                     <h4 class="section-title" onclick="editSection('${section.id}')">
@@ -90,7 +106,7 @@ const Render = {
                         <i class="ph-bold ph-plus"></i>
                     </button>
                 </div>
-                <div class="section-grid grid-${settings.cardSize} style-${settings.style}" data-section="${section.id}"></div>
+                <div class="${gridClasses}" data-section="${section.id}"></div>
             `;
 
             const grid = secDiv.querySelector('.section-grid');

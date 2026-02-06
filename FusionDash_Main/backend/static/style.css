@@ -1280,3 +1280,145 @@ input[type="range"] {
         width: 90%;
     }
 }
+
+/* ### 12 — LIBRARY VIEW OVERRIDES ### */
+
+#library-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    /* Slightly tighter gap than main board */
+    justify-content: flex-start;
+    /* Align items to start */
+    padding-bottom: 40px;
+}
+
+/* Force Standard Vertical Card Layout for Library */
+#library-grid .card {
+    /* Standard Size for Library Items */
+    flex: 0 0 160px !important;
+    width: 160px !important;
+    min-height: 140px !important;
+    height: auto !important;
+
+    /* Force Vertical Stack (Icon Top, Text Bottom) */
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    padding: 15px !important;
+
+    /* Remove any List View Grid logic if it leaks */
+    gap: 0 !important;
+}
+
+/* Reset Internal Wrappers */
+#library-grid .card-content-wrapper {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+    margin: 0 !important;
+    width: 100% !important;
+}
+
+#library-grid .card-header {
+    flex-direction: column !important;
+    align-items: center !important;
+    margin-bottom: 5px !important;
+    gap: 5px !important;
+}
+
+#library-grid .card-icon-area {
+    margin: 10px 0 10px 0 !important;
+    width: auto !important;
+    height: auto !important;
+}
+
+#library-grid .card-icon-area img {
+    width: 48px !important;
+    height: 48px !important;
+}
+
+#library-grid .card-name {
+    font-size: 0.9rem !important;
+    white-space: normal !important;
+    /* Allow wrapping in library */
+    text-align: center !important;
+}
+
+
+
+#library-grid .widget-container {
+    display: none !important;
+    /* No Widgets */
+}
+
+#library-grid .status-dot {
+    /* Optional: Keep status to see if services are up, 
+       add 'display: none !important;' here if you want it purely static */
+    display: block;
+}
+/* ### 13 — FIXED GRID LAYOUT (Logic Fix) ### */
+
+/* 1. The Grid Container */
+.style-fixed.section-grid {
+    display: grid !important;
+    gap: 20px !important;
+    width: 100% !important;
+    /* Fallback: 4 columns if no specific cols-X class is found */
+    grid-template-columns: repeat(4, 1fr);
+}
+
+/* 2. Dynamic Column Definitions (MUST match the JS class names) */
+.style-fixed.cols-1 {
+    grid-template-columns: repeat(1, 1fr) !important;
+}
+
+.style-fixed.cols-2 {
+    grid-template-columns: repeat(2, 1fr) !important;
+}
+
+.style-fixed.cols-3 {
+    grid-template-columns: repeat(3, 1fr) !important;
+}
+
+.style-fixed.cols-4 {
+    grid-template-columns: repeat(4, 1fr) !important;
+}
+
+.style-fixed.cols-5 {
+    grid-template-columns: repeat(5, 1fr) !important;
+}
+
+.style-fixed.cols-6 {
+    grid-template-columns: repeat(6, 1fr) !important;
+}
+
+.style-fixed.cols-8 {
+    grid-template-columns: repeat(8, 1fr) !important;
+}
+
+/* 3. Stretch Logic: If '.autofill' is present, force full width/height */
+.style-fixed.autofill .card {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    /* Stretches to match the tallest card in the row */
+}
+
+/* 4. Non-Stretch Logic: If '.autofill' is MISSING */
+.style-fixed:not(.autofill) .card {
+    width: auto !important;
+    height: auto !important;
+    justify-self: center;
+    /* Centers the card in the grid cell */
+    align-self: center;
+}
+
+/* 5. Mobile Fallback (Always force 2 columns on small screens) */
+@media (max-width: 768px) {
+    .style-fixed.section-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+}
