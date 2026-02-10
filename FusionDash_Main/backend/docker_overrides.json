@@ -1,0 +1,42 @@
+{
+  "74a3d95148280e8ad23c6393f146418a85117b8877dc9093806bf71e3d8b0d55": {
+    "name": "Homepage",
+    "displaySource": "docker",
+    "group": "Other",
+    "description": "",
+    "href": "http://localhost:3001",
+    "icon": "homepage",
+    "widgetType": "",
+    "apiKey": ""
+  },
+  "ed2476c7e9514c37e5dec3f94b80294def553c1a1e2e1592cec82b65966ad0cb": {
+    "name": "Open-Webui",
+    "displaySource": "docker",
+    "group": "Tools",
+    "description": "",
+    "href": "http://localhost:3000",
+    "icon": "open-webui",
+    "widgetType": "",
+    "apiKey": ""
+  },
+  "eb383dd6d57785032a9d759273b86a0d7f485fd79568d787997502b720d3021b": {
+    "name": "Searxng",
+    "displaySource": "docker",
+    "group": "Other",
+    "description": "",
+    "href": "http://localhost:0",
+    "icon": "searxng",
+    "widgetType": "",
+    "apiKey": ""
+  },
+  "7c233da066990ab4611bc893f17e98505c089ec99d2e8572304211c69c06902a": {
+    "name": "Radarr",
+    "displaySource": "docker",
+    "group": "media",
+    "description": "Movies",
+    "href": "http://localhost:7878",
+    "icon": "radarr",
+    "widgetType": "arr_queue",
+    "apiKey": "e8b404681c08407fb70467c381b1894d"
+  }
+}

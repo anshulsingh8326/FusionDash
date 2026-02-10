@@ -9,6 +9,7 @@ import os
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_FILE = BASE_DIR / "user_settings.json"
+OVERRIDES_FILE = "docker_overrides.json" # New file for overrides
 
 app = FastAPI()
 
@@ -17,13 +18,15 @@ def reset_settings():
     """Factory Reset: Deletes the settings file to restore defaults."""
     if DATA_FILE.exists():
         os.remove(DATA_FILE)
+    if os.path.exists(OVERRIDES_FILE):
+        os.remove(OVERRIDES_FILE)
     return {"status": "reset"}
 
 # --- HELPER FUNCTIONS ---
 
 def load_settings():
+    # Load Main Settings
     defaults = {
-        "overrides": {}, 
         "manual": [], 
         "hidden": [], 
         "theme": {
@@ -32,25 +35,41 @@ def load_settings():
             "glass": 0.7
         }
     }
-    if not DATA_FILE.exists():
-        return defaults
-    try:
-        data = json.loads(DATA_FILE.read_text())
-        for key, val in defaults.items():
-            if key not in data:
-                data[key] = val
-        return data
-    except:
-        return defaults
+    data = defaults
+    if DATA_FILE.exists():
+        try:
+            loaded = json.loads(DATA_FILE.read_text())
+            for key, val in defaults.items():
+                if key not in loaded:
+                    loaded[key] = val
+            data = loaded
+        except: pass
+
+    # Load Overrides (Separate File)
+    overrides = {}
+    if os.path.exists(OVERRIDES_FILE):
+        try:
+            with open(OVERRIDES_FILE, 'r') as f:
+                overrides = json.load(f)
+        except: pass
+    
+    data["overrides"] = overrides
+    return data
 
 def save_settings(data):
+    # Split overrides back to their own file
+    overrides = data.pop("overrides", {})
+    
     DATA_FILE.write_text(json.dumps(data, indent=2))
+    
+    with open(OVERRIDES_FILE, 'w') as f:
+        json.dump(overrides, f, indent=2)
 
 def get_all_services(settings):
     """Combines Docker Scan + Manual Apps + Overrides"""
     final_list = []
 
-    # 1. Docker Scan
+    # 1. Docker Scan (Overrides are applied inside docker_scan now for better architecture)
     try:
         docker_apps = scan_containers()
     except Exception as e:
@@ -58,24 +77,16 @@ def get_all_services(settings):
         docker_apps = []
 
     for app in docker_apps:
-        # SKIP if Globally Hidden (The "Uninstall" logic)
+        # SKIP if Globally Hidden
         if app["id"] in settings["hidden"]:
             continue
-            
         # DEFAULT: Pinned to Board = True
         app["pinned"] = True
-
-        # Apply Overrides (Name, Icon, PINNED status)
-        if app["name"] in settings["overrides"]:
-            app.update(settings["overrides"][app["name"]])
-            
         final_list.append(app)
 
     # 2. Manual Apps
     for m_app in settings["manual"]:
-        # SKIP if Globally Hidden
         if m_app["id"] not in settings["hidden"]:
-            # Default manual apps to pinned if not specified
             if "pinned" not in m_app:
                 m_app["pinned"] = True
             final_list.append(m_app)
@@ -106,13 +117,10 @@ def update_service(id: str, payload: dict = Body(...)):
             break
             
     if not is_manual:
-        # Docker App: Save to overrides
-        # Ensure we have the name to use as key
-        name = payload.get("name")
-        if name:
-            if name not in settings["overrides"]:
-                settings["overrides"][name] = {}
-            settings["overrides"][name].update(payload)
+        # Docker App: Save to overrides by ID
+        if id not in settings["overrides"]:
+            settings["overrides"][id] = {}
+        settings["overrides"][id].update(payload)
 
     save_settings(settings)
     return {"status": "ok"}
@@ -122,7 +130,7 @@ def add_manual(payload: dict = Body(...)):
     settings = load_settings()
     payload["id"] = f"manual_{len(settings['manual']) + 100}"
     payload["source"] = "manual"
-    payload["pinned"] = True # Default new apps to pinned
+    payload["pinned"] = True 
     if "group" not in payload or not payload["group"]:
         payload["group"] = "Unsorted"
         
@@ -132,7 +140,7 @@ def add_manual(payload: dict = Body(...)):
 
 @app.post("/api/services/{id}/hide")
 def hide_service(id: str):
-    """Global Hide (The 'Uninstall' logic)"""
+    """Global Hide"""
     settings = load_settings()
     if id not in settings["hidden"]:
         settings["hidden"].append(id)
@@ -146,7 +154,7 @@ def update_theme(payload: dict = Body(...)):
     save_settings(settings)
     return {"status": "ok"}
 
-# --- UTILS ---
+# --- UTILS & INTEGRATIONS ---
 
 @app.get("/api/status/ping")
 def ping_service(url: str):
@@ -159,15 +167,71 @@ def ping_service(url: str):
     except:
         return {"status": "offline"}
 
+# --- UPDATED: SMART ARR STATISTICS ---
 @app.get("/api/integration/arr/queue")
 def arr_queue(url: str, api_key: str):
+    """
+    Fetches Queue AND Library Counts (Radarr Movies, Sonarr Series, etc.)
+    Works for Docker, Windows, Linux, and Web Apps.
+    """
+    # Initialize default structure
+    stats = {
+        "count": 0,           # Queue count (Active Downloads)
+        "libraryCount": 0,    # Total Items (Movies/Series)
+        "type": "Generic",    # App Type detected
+        "status": "online"
+    }
+
+    if not url or not api_key:
+        return stats
+
+    headers = {"X-Api-Key": api_key}
+    base_url = url.rstrip('/')
+
     try:
-        target = f"{url.rstrip('/')}/api/v3/queue"
-        res = requests.get(target, headers={"X-Api-Key": api_key}, timeout=2)
-        if res.status_code == 200:
-            return {"count": res.json().get("totalRecords", 0)}
-    except:
-        pass
-    return {"count": 0}
+        # 1. GET QUEUE (Universal for all *Arr apps)
+        q_resp = requests.get(f"{base_url}/api/v3/queue", headers=headers, timeout=2, verify=False)
+        if q_resp.status_code == 200:
+            stats["count"] = q_resp.json().get("totalRecords", 0)
+        else:
+            return stats # If queue fails, likely auth error or offline
+
+        # 2. DETECT & COUNT LIBRARY
+        # Try Radarr (Movies)
+        try:
+            # Short timeout, check for movies endpoint
+            m_resp = requests.get(f"{base_url}/api/v3/movie", headers=headers, timeout=3, verify=False)
+            if m_resp.status_code == 200:
+                movies = m_resp.json()
+                stats["libraryCount"] = len(movies)
+                stats["type"] = "Movies"
+                return stats
+        except: pass
+
+        # Try Sonarr (Series)
+        try:
+            s_resp = requests.get(f"{base_url}/api/v3/series", headers=headers, timeout=3, verify=False)
+            if s_resp.status_code == 200:
+                series = s_resp.json()
+                stats["libraryCount"] = len(series)
+                stats["type"] = "Series"
+                return stats
+        except: pass
+
+        # Try Lidarr (Artists)
+        try:
+            l_resp = requests.get(f"{base_url}/api/v1/artist", headers=headers, timeout=3, verify=False)
+            if l_resp.status_code == 200:
+                artists = l_resp.json()
+                stats["libraryCount"] = len(artists)
+                stats["type"] = "Artists"
+                return stats
+        except: pass
+        
+    except Exception as e:
+        print(f"Arr Integration Error: {e}")
+        stats["status"] = "offline"
+
+    return stats
 
 app.mount("/", StaticFiles(directory=BASE_DIR / "static", html=True), name="static")
